@@ -1,0 +1,1517 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import axios from 'axios';
+import Navbar from '../components/Navbar';
+
+const API_URL = window.location.origin + '/api';
+
+const YEAR_LABELS = { 1: 'I', 2: 'II', 3: 'III', 4: 'IV' };
+const SEM_LABELS = { 1: 'I', 2: 'II' };
+
+function AdminDashboard() {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+
+  // Main tab
+  const [activeTab, setActiveTab] = useState('dashboard');
+
+  // Students
+  const [students, setStudents] = useState([]);
+  const [studentFilterBranch, setStudentFilterBranch] = useState('');
+  const [studentFilterSection, setStudentFilterSection] = useState('');
+  const [studentSearch, setStudentSearch] = useState('');
+  const [selectedStudents, setSelectedStudents] = useState([]);
+  const [viewingStudent, setViewingStudent] = useState(null);
+  const [viewingStudentResults, setViewingStudentResults] = useState([]);
+  const [viewingStudentSummaries, setViewingStudentSummaries] = useState([]);
+  const [viewingStudentCgpa, setViewingStudentCgpa] = useState(null);
+  const [viewingStudentPending, setViewingStudentPending] = useState([]);
+  const [viewingStudentLoading, setViewingStudentLoading] = useState(false);
+  const [studentEditingResult, setStudentEditingResult] = useState(null);
+  const [studentEditForm, setStudentEditForm] = useState({});
+
+  // Quick search (overview)
+  const [searchRoll, setSearchRoll] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
+
+  // Overview stats
+  const [overviewStats, setOverviewStats] = useState(null);
+  const [expandedBranch, setExpandedBranch] = useState(null);
+  const [expandedBatch, setExpandedBatch] = useState(null);
+
+  // Uploads
+  const [uploads, setUploads] = useState([]);
+  const [uploadsLoading, setUploadsLoading] = useState(false);
+
+  // Staff/Users (User Management)
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({
+    username: '', password: '', full_name: '', role: 'staff', permissions: '',
+  });
+
+  // Password management (merged into User Management)
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: '', new_password: '', confirm_password: '',
+  });
+  const [resetForm, setResetForm] = useState({
+    roll_number: '', new_password: '',
+  });
+
+  // Notifications / Correction Requests
+  const [correctionRequests, setCorrectionRequests] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [adminRemarks, setAdminRemarks] = useState('');
+  const [requestStudentResults, setRequestStudentResults] = useState([]);
+  const [editingResult, setEditingResult] = useState(null);
+  const [editForm, setEditForm] = useState({});
+
+  const token = localStorage.getItem('token');
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const headers = { Authorization: `Bearer ${token}` };
+  const isSuperAdmin = user.admin_role === 'super_admin';
+
+  useEffect(() => {
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+    fetchStudents();
+    fetchPendingCount();
+    fetchOverviewStats();
+    // eslint-disable-next-line
+  }, []);
+
+  // ==========================================
+  // DATA FETCHING
+  // ==========================================
+
+  const fetchOverviewStats = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/admin/overview-stats`, { headers });
+      setOverviewStats(response.data);
+    } catch (error) {
+      console.error('Failed to fetch overview stats', error);
+    }
+  };
+
+  const fetchStudents = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/admin/students`, { headers });
+      setStudents(response.data.students);
+    } catch (error) {
+      if (error.response?.status === 401) {
+        toast.error('Session expired. Please login again.');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+      } else {
+        toast.error('Failed to load students');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchFilteredStudents = async () => {
+    try {
+      const params = [];
+      if (studentFilterBranch) params.push(`branch=${studentFilterBranch}`);
+      if (studentFilterSection) params.push(`section=${studentFilterSection}`);
+      if (studentSearch) params.push(`search=${encodeURIComponent(studentSearch)}`);
+      const url = `${API_URL}/admin/students/filtered${params.length ? '?' + params.join('&') : ''}`;
+      const response = await axios.get(url, { headers });
+      setStudents(response.data.students);
+    } catch (error) {
+      toast.error('Failed to filter students');
+    }
+  };
+
+  const fetchUploads = async () => {
+    setUploadsLoading(true);
+    try {
+      const response = await axios.get(`${API_URL}/admin/uploads`, { headers });
+      setUploads(response.data.uploads);
+    } catch (error) {
+      toast.error('Failed to load uploads');
+    } finally {
+      setUploadsLoading(false);
+    }
+  };
+
+  const fetchAdminUsers = async () => {
+    setUsersLoading(true);
+    try {
+      const response = await axios.get(`${API_URL}/admin/users`, { headers });
+      setAdminUsers(response.data.users);
+    } catch (error) {
+      toast.error('Failed to load users');
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const fetchPendingCount = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/admin/correction-requests/count`, { headers });
+      setPendingCount(response.data.pending_count || 0);
+    } catch (error) {
+      // silently fail
+    }
+  };
+
+  const fetchCorrectionRequests = async () => {
+    setNotificationsLoading(true);
+    try {
+      const response = await axios.get(`${API_URL}/admin/correction-requests`, { headers });
+      setCorrectionRequests(response.data.requests || []);
+      // Update pending count (includes IN_PROGRESS)
+      const pending = (response.data.requests || []).filter(r => r.status === 'PENDING' || r.status === 'IN_PROGRESS').length;
+      setPendingCount(pending);
+    } catch (error) {
+      toast.error('Failed to load correction requests');
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  const fetchRequestStudentResults = async (rollNumber) => {
+    try {
+      const response = await axios.get(`${API_URL}/admin/student-results/${rollNumber}`, { headers });
+      setRequestStudentResults(response.data.results || []);
+    } catch (error) {
+      toast.error('Failed to load student results');
+    }
+  };
+
+  // ==========================================
+  // TAB SWITCHING
+  // ==========================================
+
+  const switchTab = (tab) => {
+    setActiveTab(tab);
+    setSearchResults(null);
+    setSelectedRequest(null);
+    setViewingStudent(null);
+    setViewingStudentResults([]);
+    setViewingStudentSummaries([]);
+    setViewingStudentCgpa(null);
+    setViewingStudentPending([]);
+
+    if (tab === 'uploads') fetchUploads();
+    if (tab === 'users') fetchAdminUsers();
+    if (tab === 'notifications') fetchCorrectionRequests();
+    if (tab === 'students') {
+      setStudentFilterBranch('');
+      setStudentFilterSection('');
+      setStudentSearch('');
+      setSelectedStudents([]);
+      fetchStudents();
+    }
+  };
+
+  // ==========================================
+  // QUICK SEARCH (Overview)
+  // ==========================================
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!searchRoll.trim()) {
+      toast.error('Enter a roll/hall ticket number');
+      return;
+    }
+    setSearchLoading(true);
+    setSearchResults(null);
+    try {
+      const response = await axios.get(
+        `${API_URL}/admin/search-student?roll_number=${encodeURIComponent(searchRoll.trim())}`,
+        { headers }
+      );
+      if (response.data.exact) {
+        setSearchResults([response.data.student]);
+      } else {
+        setSearchResults(response.data.students);
+      }
+    } catch (error) {
+      if (error.response?.status === 404) {
+        toast.error('No student found with this roll number');
+      } else {
+        toast.error('Search failed');
+      }
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // ==========================================
+  // STUDENT MANAGEMENT
+  // ==========================================
+
+  // ==========================================
+  // VIEW STUDENT RESULTS (Students Tab)
+  // ==========================================
+
+  const handleViewStudentResults = async (student) => {
+    setViewingStudent(student);
+    setViewingStudentLoading(true);
+    setStudentEditingResult(null);
+    setStudentEditForm({});
+    try {
+      const response = await axios.get(`${API_URL}/admin/student-results/${student.roll_number}`, { headers });
+      setViewingStudentResults(response.data.results || []);
+      setViewingStudentSummaries(response.data.semester_summaries || []);
+      setViewingStudentCgpa(response.data.cgpa);
+      setViewingStudentPending(response.data.pending_subjects || []);
+    } catch (error) {
+      toast.error('Failed to load student results');
+    } finally {
+      setViewingStudentLoading(false);
+    }
+  };
+
+  const handleBackToStudents = () => {
+    setViewingStudent(null);
+    setViewingStudentResults([]);
+    setViewingStudentSummaries([]);
+    setViewingStudentCgpa(null);
+    setViewingStudentPending([]);
+    setStudentEditingResult(null);
+    setStudentEditForm({});
+  };
+
+  const startStudentEditResult = (result) => {
+    setStudentEditingResult(result.id);
+    setStudentEditForm({ ...result });
+  };
+
+  const cancelStudentEditResult = () => {
+    setStudentEditingResult(null);
+    setStudentEditForm({});
+  };
+
+  const saveStudentEditResult = async () => {
+    try {
+      await axios.put(`${API_URL}/admin/results/${studentEditingResult}`, studentEditForm, { headers });
+      toast.success('Result updated successfully!');
+      setStudentEditingResult(null);
+      setStudentEditForm({});
+      // Reload results for this student
+      if (viewingStudent) {
+        await handleViewStudentResults(viewingStudent);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to update result');
+    }
+  };
+
+  const handleToggleStudent = (rollNumber) => {
+    setSelectedStudents(prev =>
+      prev.includes(rollNumber) ? prev.filter(r => r !== rollNumber) : [...prev, rollNumber]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedStudents.length === students.length) {
+      setSelectedStudents([]);
+    } else {
+      setSelectedStudents(students.map(s => s.roll_number));
+    }
+  };
+
+  const handleDeleteStudent = async (rollNumber) => {
+    if (!window.confirm(`Delete student ${rollNumber}? This will also delete all their results, summaries, and uploads.`)) return;
+    try {
+      await axios.delete(`${API_URL}/admin/students/${rollNumber}`, { headers });
+      toast.success(`Student ${rollNumber} deleted`);
+      fetchStudents();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to delete student');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedStudents.length === 0) {
+      toast.error('No students selected');
+      return;
+    }
+    if (!window.confirm(`Delete ${selectedStudents.length} selected student(s)? This will also delete all their results.`)) return;
+    try {
+      await axios.post(`${API_URL}/admin/students/bulk-delete`, { roll_numbers: selectedStudents }, { headers });
+      toast.success(`${selectedStudents.length} student(s) deleted`);
+      setSelectedStudents([]);
+      fetchStudents();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Bulk delete failed');
+    }
+  };
+
+  const handleStudentFilter = () => {
+    fetchFilteredStudents();
+  };
+
+  const handleClearStudentFilter = () => {
+    setStudentFilterBranch('');
+    setStudentFilterSection('');
+    setStudentSearch('');
+    fetchStudents();
+  };
+
+  // ==========================================
+  // UPLOAD MANAGEMENT
+  // ==========================================
+
+  const handleDeleteUpload = async (uploadId) => {
+    if (!window.confirm('Delete this upload? All results and summaries from this upload will be removed.')) return;
+    try {
+      const res = await axios.delete(`${API_URL}/admin/uploads/${uploadId}`, { headers });
+      toast.success(res.data.message);
+      fetchUploads();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to delete upload');
+    }
+  };
+
+  // ==========================================
+  // USER MANAGEMENT (merged Staff + Settings)
+  // ==========================================
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${API_URL}/admin/create-user`, newUserForm, { headers });
+      toast.success(`User '${newUserForm.username}' created successfully!`);
+      setNewUserForm({ username: '', password: '', full_name: '', role: 'staff', permissions: '' });
+      setShowCreateUser(false);
+      fetchAdminUsers();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to create user');
+    }
+  };
+
+  const handleDeleteUser = async (userId, username) => {
+    if (!window.confirm(`Delete user '${username}'?`)) return;
+    try {
+      await axios.delete(`${API_URL}/admin/users/${userId}`, { headers });
+      toast.success(`User '${username}' deleted`);
+      fetchAdminUsers();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to delete user');
+    }
+  };
+
+  // ==========================================
+  // PASSWORD MANAGEMENT
+  // ==========================================
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    try {
+      await axios.put(`${API_URL}/admin/change-password`, {
+        current_password: passwordForm.current_password,
+        new_password: passwordForm.new_password,
+      }, { headers });
+      toast.success('Password changed successfully!');
+      setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to change password');
+    }
+  };
+
+  const handleResetStudentPassword = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.put(`${API_URL}/admin/reset-student-password`, resetForm, { headers });
+      toast.success(`Password for ${resetForm.roll_number} has been reset`);
+      setResetForm({ roll_number: '', new_password: '' });
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to reset password');
+    }
+  };
+
+  // ==========================================
+  // CORRECTION REQUESTS / NOTIFICATIONS
+  // ==========================================
+
+  const handleViewRequest = async (req) => {
+    setSelectedRequest(req);
+    setAdminRemarks(req.admin_remarks || '');
+    setEditingResult(null);
+    setEditForm({});
+    // Load student results for this student
+    await fetchRequestStudentResults(req.roll_number);
+    // Auto-set to IN_PROGRESS when admin clicks Review on PENDING request
+    if (req.status === 'PENDING') {
+      try {
+        await axios.put(`${API_URL}/admin/correction-requests/${req.id}`, {
+          status: 'IN_PROGRESS',
+        }, { headers });
+        // Update local state
+        req.status = 'IN_PROGRESS';
+        setSelectedRequest({ ...req, status: 'IN_PROGRESS' });
+        setCorrectionRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'IN_PROGRESS' } : r));
+        const updatedPending = correctionRequests.filter(r => r.id !== req.id && (r.status === 'PENDING' || r.status === 'IN_PROGRESS')).length;
+        setPendingCount(updatedPending);
+      } catch (error) {
+        // Silently fail - non-critical
+      }
+    }
+  };
+
+  const handleBackToRequests = () => {
+    setSelectedRequest(null);
+    setAdminRemarks('');
+    setEditingResult(null);
+    setEditForm({});
+    setRequestStudentResults([]);
+  };
+
+  const handleDownloadAttachment = async (reqId) => {
+    try {
+      const response = await axios.get(`${API_URL}/admin/correction-requests/${reqId}/attachment`, {
+        headers,
+        responseType: 'blob',
+      });
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = `attachment_${reqId}`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename=(.+)/);
+        if (match) filename = match[1].replace(/"/g, '');
+      }
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error('Failed to download attachment');
+    }
+  };
+
+  const startEditResult = (result) => {
+    setEditingResult(result.id);
+    setEditForm({ ...result });
+  };
+
+  const cancelEditResult = () => {
+    setEditingResult(null);
+    setEditForm({});
+  };
+
+  const saveEditResult = async () => {
+    try {
+      await axios.put(`${API_URL}/admin/results/${editingResult}`, editForm, { headers });
+      toast.success('Result updated successfully!');
+      setEditingResult(null);
+      setEditForm({});
+      // Reload results for this student
+      if (selectedRequest) {
+        await fetchRequestStudentResults(selectedRequest.roll_number);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to update result');
+    }
+  };
+
+  const handleResolveRequest = async (reqId) => {
+    try {
+      await axios.put(`${API_URL}/admin/correction-requests/${reqId}`, {
+        status: 'RESOLVED',
+        admin_remarks: adminRemarks,
+      }, { headers });
+      toast.success('Correction request resolved!');
+      setSelectedRequest(null);
+      setAdminRemarks('');
+      setRequestStudentResults([]);
+      fetchCorrectionRequests();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to resolve request');
+    }
+  };
+
+  const handleRejectRequest = async (reqId) => {
+    if (!adminRemarks.trim()) {
+      toast.error('Please provide remarks explaining the rejection');
+      return;
+    }
+    try {
+      await axios.put(`${API_URL}/admin/correction-requests/${reqId}`, {
+        status: 'REJECTED',
+        admin_remarks: adminRemarks,
+      }, { headers });
+      toast.success('Correction request rejected');
+      setSelectedRequest(null);
+      setAdminRemarks('');
+      setRequestStudentResults([]);
+      fetchCorrectionRequests();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to reject request');
+    }
+  };
+
+  // ==========================================
+  // HELPERS
+  // ==========================================
+
+  const getGradeClass = (grade) => {
+    if (!grade) return '';
+    const g = grade.replace('+', 'plus');
+    return `grade-${g}`;
+  };
+
+  const getStatusClass = (status) => {
+    if (status === 'PASS') return 'status-pass';
+    if (status === 'FAIL') return 'status-fail';
+    return 'status-other';
+  };
+
+  const getRequestStatusClass = (status) => {
+    if (status === 'PENDING') return 'status-pending';
+    if (status === 'IN_PROGRESS') return 'status-in-progress';
+    if (status === 'RESOLVED') return 'status-pass';
+    if (status === 'REJECTED') return 'status-fail';
+    return 'status-other';
+  };
+
+  const totalStudents = students.length;
+  const branchCounts = students.reduce((acc, s) => {
+    acc[s.branch] = (acc[s.branch] || 0) + 1;
+    return acc;
+  }, {});
+
+  // Group request student results by year-semester (filtered to requested semester only)
+  const groupedRequestResults = {};
+  requestStudentResults.forEach((r) => {
+    // If correction request has year/semester, show only that semester
+    if (selectedRequest?.year && selectedRequest?.semester) {
+      if (r.year !== selectedRequest.year || r.semester !== selectedRequest.semester) return;
+    }
+    const key = `${r.year}-${r.semester}`;
+    if (!groupedRequestResults[key]) groupedRequestResults[key] = [];
+    groupedRequestResults[key].push(r);
+  });
+  const sortedRequestKeys = Object.keys(groupedRequestResults).sort();
+
+  // Group viewing student results by year-semester
+  const groupedViewResults = {};
+  viewingStudentResults.forEach((r) => {
+    const key = `${r.year}-${r.semester}`;
+    if (!groupedViewResults[key]) groupedViewResults[key] = [];
+    groupedViewResults[key].push(r);
+  });
+  const sortedViewKeys = Object.keys(groupedViewResults).sort();
+
+  if (loading) {
+    return (
+      <>
+        <Navbar />
+        <div className="dashboard-container">
+          <div className="loading"><div className="spinner"></div></div>
+        </div>
+      </>
+    );
+  }
+
+  // ==========================================
+  // RENDER
+  // ==========================================
+
+  return (
+    <>
+      <Navbar />
+      <div className="dashboard-container">
+        {/* Welcome Card */}
+        <div className="welcome-card">
+          <h2>Admin Dashboard</h2>
+          <p>Manage students, uploads, notifications, and users</p>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="admin-tabs">
+          {[
+            { key: 'dashboard', label: 'Overview' },
+            { key: 'students', label: 'Students' },
+            { key: 'uploads', label: 'Uploads' },
+            { key: 'notifications', label: `Notifications${pendingCount > 0 ? '' : ''}` },
+            { key: 'users', label: 'User Management' },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              className={`admin-tab ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => switchTab(tab.key)}
+            >
+              {tab.label}
+              {tab.key === 'notifications' && pendingCount > 0 && (
+                <span className="notification-badge">{pendingCount}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* ===== DASHBOARD / OVERVIEW TAB ===== */}
+        {activeTab === 'dashboard' && (
+          <>
+            {/* Student Count Cards — single row */}
+            <div className="stats-grid" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+              <div className="stat-card" style={{ flex: '1 1 120px', cursor: expandedBranch === 'ALL' ? 'default' : 'pointer', border: expandedBranch === 'ALL' ? '2px solid var(--primary-color)' : undefined }} onClick={() => setExpandedBranch(expandedBranch === 'ALL' ? null : 'ALL')}>
+                <div className="stat-info" style={{ textAlign: 'center' }}>
+                  <h3>{overviewStats?.total_students || totalStudents}</h3>
+                  <p>Total Students</p>
+                </div>
+              </div>
+              {['CSE', 'ECE', 'EEE', 'MECH'].map((branch) => (
+                <div className="stat-card" key={branch} style={{ flex: '1 1 120px', cursor: 'pointer', border: expandedBranch === branch ? '2px solid var(--primary-color)' : undefined }} onClick={() => setExpandedBranch(expandedBranch === branch ? null : branch)}>
+                  <div className="stat-info" style={{ textAlign: 'center' }}>
+                    <h3>{branchCounts[branch] || 0}</h3>
+                    <p>{branch}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Expanded Branch Drill-down */}
+            {expandedBranch && overviewStats?.branch_breakdown && (
+              <div className="table-container" style={{ marginBottom: '1.5rem' }}>
+                <div className="table-header">
+                  <h3>{expandedBranch === 'ALL' ? 'All Branches' : expandedBranch} — Batch & Section Breakdown</h3>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setExpandedBranch(null)}>Close</button>
+                </div>
+                {(() => {
+                  const branchesToShow = expandedBranch === 'ALL'
+                    ? Object.keys(overviewStats.branch_breakdown).sort()
+                    : [expandedBranch];
+
+                  const hasData = branchesToShow.some(b => overviewStats.branch_breakdown[b]);
+                  if (!hasData) return <div className="no-data"><p>No students registered in {expandedBranch}.</p></div>;
+
+                  return branchesToShow.map(branchKey => {
+                    const branchData = overviewStats.branch_breakdown[branchKey];
+                    if (!branchData) return null;
+                    const batches = branchData.batches || {};
+                    const sortedBatches = Object.keys(batches).sort();
+
+                    return (
+                      <div key={branchKey} style={{ marginBottom: '1rem' }}>
+                        {expandedBranch === 'ALL' && (
+                          <h4 style={{ padding: '0.5rem 1rem', color: 'var(--primary-color)', borderBottom: '1px solid #eee' }}>{branchKey} ({branchData.total})</h4>
+                        )}
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Batch</th>
+                              <th>Total</th>
+                              <th>Sections</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sortedBatches.map(batchYear => {
+                              const batchData = batches[batchYear];
+                              const sections = batchData.sections || {};
+                              const sortedSections = Object.keys(sections).sort();
+                              const batchPrefix = batchYear.startsWith('20') ? batchYear.slice(2) : batchYear;
+                              let batchLabel;
+                              try {
+                                batchLabel = `${batchYear}-${parseInt(batchYear) + 4}`;
+                              } catch(e) {
+                                batchLabel = batchYear;
+                              }
+                              return (
+                                <tr key={batchYear}>
+                                  <td><strong>{batchLabel}</strong></td>
+                                  <td>{batchData.total}</td>
+                                  <td>
+                                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                      {sortedSections.map(sec => (
+                                        <span key={sec} className="sgpa-badge" style={{ fontSize: '0.8rem' }}>
+                                          {sec}: {sections[sec]}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            )}
+
+            {/* Batch-wise Upload Tracking */}
+            {overviewStats?.batch_upload_stats && Object.keys(overviewStats.batch_upload_stats).length > 0 && (
+              <div className="table-container" style={{ marginBottom: '1.5rem' }}>
+                <div className="table-header">
+                  <h3>Batch-wise Upload Status</h3>
+                </div>
+                {Object.keys(overviewStats.batch_upload_stats).sort().map(batchKey => {
+                  const batch = overviewStats.batch_upload_stats[batchKey];
+                  const isExpanded = expandedBatch === batchKey;
+                  return (
+                    <div key={batchKey} style={{ borderBottom: '1px solid #eee' }}>
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 1rem', cursor: 'pointer', background: isExpanded ? '#f5f5f5' : 'transparent' }}
+                        onClick={() => setExpandedBatch(isExpanded ? null : batchKey)}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                          <strong style={{ fontSize: '1rem' }}>Batch {batch.batch_label}</strong>
+                          <span className="sgpa-badge">{batch.total_students} students</span>
+                        </div>
+                        <span style={{ fontSize: '1.2rem', color: '#666' }}>{isExpanded ? '\u25B2' : '\u25BC'}</span>
+                      </div>
+                      {isExpanded && (
+                        <div style={{ padding: '0 1rem 1rem' }}>
+                          {batch.semesters.length > 0 ? (
+                            <table>
+                              <thead>
+                                <tr>
+                                  <th>Year</th>
+                                  <th>Semester</th>
+                                  <th>Uploaded</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {batch.semesters.map(sem => {
+                                  return (
+                                    <tr key={`${sem.year}-${sem.semester}`}>
+                                      <td>Year {YEAR_LABELS[sem.year] || sem.year}</td>
+                                      <td>Sem {SEM_LABELS[sem.semester] || sem.semester}</td>
+                                      <td><strong style={{ color: '#2e7d32' }}>{sem.uploaded}</strong></td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          ) : (
+                            <p style={{ color: '#999', fontStyle: 'italic', padding: '0.5rem 0' }}>No results uploaded yet for this batch.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Quick Search */}
+            <div className="search-section">
+              <form onSubmit={handleSearch} className="search-form">
+                <div className="search-input-group">
+                  <input
+                    type="text"
+                    className="form-control search-input"
+                    placeholder="Quick search by Roll / Hall Ticket Number..."
+                    value={searchRoll}
+                    onChange={(e) => setSearchRoll(e.target.value)}
+                  />
+                  <button type="submit" className="btn btn-primary search-btn" disabled={searchLoading}>
+                    {searchLoading ? 'Searching...' : 'Search'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Search Results */}
+            {searchResults && searchResults.length > 0 && (
+              <div className="table-container">
+                <div className="table-header">
+                  <h3>Search Results ({searchResults.length} found)</h3>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setSearchResults(null)}>Close</button>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Roll Number</th><th>Full Name</th><th>Branch</th><th>Section</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {searchResults.map((s) => (
+                      <tr key={s.id || s.roll_number}>
+                        <td>{s.roll_number}</td>
+                        <td>{s.full_name}</td>
+                        <td>{s.branch}</td>
+                        <td>{s.section}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ===== STUDENTS TAB ===== */}
+        {activeTab === 'students' && (
+          <>
+            {!viewingStudent ? (
+              <>
+                {/* Filters */}
+                <div className="filter-section">
+                  <div className="filter-row">
+                    <div className="filter-group">
+                      <label>Branch</label>
+                      <select className="form-control" value={studentFilterBranch} onChange={(e) => setStudentFilterBranch(e.target.value)}>
+                        <option value="">All Branches</option>
+                        <option value="CSE">CSE</option>
+                        <option value="ECE">ECE</option>
+                        <option value="EEE">EEE</option>
+                        <option value="MECH">MECH</option>
+                      </select>
+                    </div>
+                    <div className="filter-group">
+                      <label>Section</label>
+                      <select className="form-control" value={studentFilterSection} onChange={(e) => setStudentFilterSection(e.target.value)}>
+                        <option value="">All Sections</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                      </select>
+                    </div>
+                    <div className="filter-group" style={{ flex: 2 }}>
+                      <label>Search</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Name or roll number..."
+                        value={studentSearch}
+                        onChange={(e) => setStudentSearch(e.target.value)}
+                      />
+                    </div>
+                    <button className="btn btn-primary filter-btn" onClick={handleStudentFilter}>Filter</button>
+                    <button className="btn btn-secondary filter-btn" style={{ color: 'var(--primary-color)', borderColor: 'var(--primary-color)' }} onClick={handleClearStudentFilter}>Clear</button>
+                  </div>
+                </div>
+
+                {/* Bulk Actions */}
+                {selectedStudents.length > 0 && (
+                  <div className="bulk-actions">
+                    <span>{selectedStudents.length} student(s) selected</span>
+                    <button className="btn btn-danger btn-sm" onClick={handleBulkDelete}>
+                      Delete Selected
+                    </button>
+                    <button className="btn btn-secondary btn-sm" style={{ color: '#666' }} onClick={() => setSelectedStudents([])}>
+                      Clear Selection
+                    </button>
+                  </div>
+                )}
+
+                {/* Students Table */}
+                <div className="table-container">
+                  <div className="table-header">
+                    <h3>Students ({students.length})</h3>
+                  </div>
+                  {students.length > 0 ? (
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style={{ width: '40px' }}>
+                            <input type="checkbox" checked={selectedStudents.length === students.length && students.length > 0} onChange={handleSelectAll} />
+                          </th>
+                          <th>#</th><th>Full Name</th><th>Roll Number</th><th>Branch</th><th>Section</th><th>Registered</th><th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {students.map((student, index) => (
+                          <tr key={student.id} className={selectedStudents.includes(student.roll_number) ? 'selected-row' : ''}>
+                            <td>
+                              <input type="checkbox" checked={selectedStudents.includes(student.roll_number)} onChange={() => handleToggleStudent(student.roll_number)} />
+                            </td>
+                            <td>{index + 1}</td>
+                            <td>{student.full_name}</td>
+                            <td>{student.roll_number}</td>
+                            <td>{student.branch}</td>
+                            <td>{student.section}</td>
+                            <td>{student.created_at ? new Date(student.created_at).toLocaleDateString() : '-'}</td>
+                            <td>
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <button className="btn btn-primary btn-sm" onClick={() => handleViewStudentResults(student)}>
+                                  View Results
+                                </button>
+                                <button className="btn btn-danger btn-sm" onClick={() => handleDeleteStudent(student.roll_number)}>
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="no-data">
+                      <div className="no-data-icon">&#128101;</div>
+                      <h3>No Students Found</h3>
+                      <p>No students match the current filters.</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* ===== STUDENT DETAIL VIEW ===== */
+              <>
+                <div style={{ marginBottom: '1rem' }}>
+                  <button className="btn btn-secondary btn-sm" style={{ color: 'var(--primary-color)', borderColor: 'var(--primary-color)' }} onClick={handleBackToStudents}>
+                    &larr; Back to Students
+                  </button>
+                </div>
+
+                {/* Student Info Card */}
+                <div className="table-container" style={{ padding: '2rem', marginBottom: '1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div>
+                      <h3 style={{ color: 'var(--primary-color)', marginBottom: '0.5rem' }}>{viewingStudent.full_name}</h3>
+                      <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', color: '#555' }}>
+                        <span><strong>Roll No:</strong> {viewingStudent.roll_number}</span>
+                        <span><strong>Branch:</strong> {viewingStudent.branch}</span>
+                        <span><strong>Section:</strong> {viewingStudent.section}</span>
+                      </div>
+                    </div>
+                    {viewingStudentCgpa !== null && viewingStudentCgpa !== undefined && (
+                      <div style={{ textAlign: 'center', background: 'linear-gradient(135deg, var(--primary-color), var(--secondary-color))', color: '#fff', padding: '1rem 2rem', borderRadius: '12px' }}>
+                        <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>CGPA</div>
+                        <div style={{ fontSize: '1.8rem', fontWeight: 700 }}>{viewingStudentCgpa}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Semester Summaries */}
+                {viewingStudentSummaries.length > 0 && (
+                  <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
+                    {viewingStudentSummaries.map((sem) => (
+                      <div className="stat-card" key={`${sem.year}-${sem.semester}`}>
+                        <div className="stat-info" style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: '0.25rem' }}>
+                            Year {YEAR_LABELS[sem.year]} - Sem {SEM_LABELS[sem.semester]}
+                          </div>
+                          <h3 style={{ color: 'var(--primary-color)' }}>{sem.sgpa}</h3>
+                          <p style={{ fontSize: '0.75rem' }}>SGPA | {sem.passed_subjects}/{sem.total_subjects} passed</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pending Subjects */}
+                {viewingStudentPending.length > 0 && (
+                  <div className="table-container" style={{ marginBottom: '1.5rem', borderLeft: '4px solid #f44336' }}>
+                    <div className="table-header">
+                      <h3 style={{ color: '#d32f2f' }}>Pending / Failed Subjects ({viewingStudentPending.length})</h3>
+                    </div>
+                    <table>
+                      <thead>
+                        <tr><th>Code</th><th>Subject</th><th>Year</th><th>Sem</th><th>Total</th><th>Grade</th></tr>
+                      </thead>
+                      <tbody>
+                        {viewingStudentPending.map((r) => (
+                          <tr key={r.id}>
+                            <td>{r.subject_code}</td>
+                            <td>{r.subject_name}</td>
+                            <td>{YEAR_LABELS[r.year]}</td>
+                            <td>{SEM_LABELS[r.semester]}</td>
+                            <td>{r.total_marks}</td>
+                            <td><span className="grade-badge grade-F">{r.grade || 'F'}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {viewingStudentLoading ? (
+                  <div className="loading"><div className="spinner"></div></div>
+                ) : sortedViewKeys.length > 0 ? (
+                  /* Results grouped by Year-Semester */
+                  <div className="table-container" style={{ marginBottom: '1.5rem' }}>
+                    <div className="table-header">
+                      <h3>Results ({viewingStudentResults.length} subjects)</h3>
+                    </div>
+                    {sortedViewKeys.map((key) => {
+                      const [y, s] = key.split('-');
+                      return (
+                        <div key={key} style={{ marginBottom: '1rem' }}>
+                          <h4 style={{ padding: '0.5rem 1.5rem', color: 'var(--primary-color)', background: '#f0f4ff', margin: 0 }}>
+                            Year {YEAR_LABELS[y]} - Semester {SEM_LABELS[s]}
+                          </h4>
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Code</th><th>Subject</th><th>Total Marks</th><th>Grade Pts</th><th>Grade</th><th>Status</th><th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {groupedViewResults[key].map((result) => (
+                                studentEditingResult === result.id ? (
+                                  <tr key={result.id} className="editing-row">
+                                    <td><input type="text" className="form-control table-input" value={studentEditForm.subject_code} onChange={(e) => setStudentEditForm({...studentEditForm, subject_code: e.target.value})} /></td>
+                                    <td><input type="text" className="form-control table-input" value={studentEditForm.subject_name} onChange={(e) => setStudentEditForm({...studentEditForm, subject_name: e.target.value})} /></td>
+                                    <td><input type="number" className="form-control table-input" value={studentEditForm.total_marks} onChange={(e) => setStudentEditForm({...studentEditForm, total_marks: e.target.value})} /></td>
+                                    <td><input type="number" step="0.01" className="form-control table-input" value={studentEditForm.grade_points} onChange={(e) => setStudentEditForm({...studentEditForm, grade_points: e.target.value})} /></td>
+                                    <td><input type="text" className="form-control table-input" value={studentEditForm.grade} onChange={(e) => setStudentEditForm({...studentEditForm, grade: e.target.value})} /></td>
+                                    <td>
+                                      <select className="form-control table-input" value={studentEditForm.status} onChange={(e) => setStudentEditForm({...studentEditForm, status: e.target.value})}>
+                                        <option value="PASS">PASS</option><option value="FAIL">FAIL</option><option value="AB">AB</option><option value="MP">MP</option>
+                                      </select>
+                                    </td>
+                                    <td>
+                                      <div style={{ display: 'flex', gap: '4px' }}>
+                                        <button className="btn btn-success btn-sm" onClick={saveStudentEditResult}>Save</button>
+                                        <button className="btn btn-secondary btn-sm" style={{ color: '#666', borderColor: '#ccc' }} onClick={cancelStudentEditResult}>Cancel</button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  <tr key={result.id}>
+                                    <td>{result.subject_code}</td>
+                                    <td>{result.subject_name}</td>
+                                    <td><strong>{result.total_marks}</strong></td>
+                                    <td>{result.grade_points}</td>
+                                    <td><span className={`grade-badge ${getGradeClass(result.grade)}`}>{result.grade}</span></td>
+                                    <td><span className={`status-badge ${getStatusClass(result.status)}`}>{result.status}</span></td>
+                                    <td>
+                                      <button className="btn btn-primary btn-sm" onClick={() => startStudentEditResult(result)}>Edit</button>
+                                    </td>
+                                  </tr>
+                                )
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="table-container">
+                    <div className="no-data">
+                      <div className="no-data-icon">&#128196;</div>
+                      <h3>No Results Found</h3>
+                      <p>This student has not uploaded any marks memo yet.</p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* ===== UPLOADS TAB ===== */}
+        {activeTab === 'uploads' && (
+          <>
+            <div className="table-container">
+              <div className="table-header">
+                <h3>Upload History</h3>
+                <button className="btn btn-secondary btn-sm" style={{ color: 'var(--primary-color)', borderColor: 'var(--primary-color)' }} onClick={fetchUploads}>
+                  Refresh
+                </button>
+              </div>
+              {uploadsLoading ? (
+                <div className="loading"><div className="spinner"></div></div>
+              ) : uploads.length > 0 ? (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th><th>Student</th><th>Roll Number</th><th>Branch</th>
+                      <th>Filename</th><th>Semesters</th><th>Subjects</th>
+                      <th>Uploaded</th><th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {uploads.map((upload, idx) => (
+                      <tr key={upload.id}>
+                        <td>{idx + 1}</td>
+                        <td>{upload.full_name}</td>
+                        <td>{upload.roll_number}</td>
+                        <td>{upload.branch}</td>
+                        <td>{upload.original_filename || '-'}</td>
+                        <td>{upload.num_semesters}</td>
+                        <td>{upload.num_subjects}</td>
+                        <td>{upload.upload_time ? new Date(upload.upload_time).toLocaleString() : '-'}</td>
+                        <td>
+                          <button className="btn btn-danger btn-sm" onClick={() => handleDeleteUpload(upload.id)}>
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="no-data">
+                  <div className="no-data-icon">&#128228;</div>
+                  <h3>No Uploads</h3>
+                  <p>No marks memo uploads have been recorded yet.</p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ===== NOTIFICATIONS TAB ===== */}
+        {activeTab === 'notifications' && (
+          <>
+            {!selectedRequest ? (
+              /* Correction Requests List */
+              <div className="table-container">
+                <div className="table-header">
+                  <h3>Correction Requests {pendingCount > 0 && <span className="notification-badge-inline">{pendingCount} pending</span>}</h3>
+                  <button className="btn btn-secondary btn-sm" style={{ color: 'var(--primary-color)', borderColor: 'var(--primary-color)' }} onClick={fetchCorrectionRequests}>
+                    Refresh
+                  </button>
+                </div>
+                {notificationsLoading ? (
+                  <div className="loading"><div className="spinner"></div></div>
+                ) : correctionRequests.length > 0 ? (
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>#</th><th>Student</th><th>Roll Number</th><th>Title</th>
+                        <th>Status</th><th>Submitted</th><th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {correctionRequests.map((req, idx) => (
+                        <tr key={req.id} className={req.status === 'PENDING' ? 'pending-request-row' : req.status === 'IN_PROGRESS' ? 'in-progress-request-row' : ''}>
+                          <td>{idx + 1}</td>
+                          <td>{req.full_name}</td>
+                          <td>{req.roll_number}</td>
+                          <td><strong>{req.title}</strong></td>
+                          <td>
+                            <span className={`status-badge ${getRequestStatusClass(req.status)}`}>
+                              {req.status === 'IN_PROGRESS' ? 'IN PROGRESS' : req.status}
+                            </span>
+                          </td>
+                          <td>{req.created_at ? new Date(req.created_at).toLocaleString() : '-'}</td>
+                          <td>
+                            <button className="btn btn-primary btn-sm" onClick={() => handleViewRequest(req)}>
+                              {req.status === 'PENDING' || req.status === 'IN_PROGRESS' ? 'Review' : 'View'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="no-data">
+                    <div className="no-data-icon">&#128276;</div>
+                    <h3>No Correction Requests</h3>
+                    <p>No students have submitted correction requests yet.</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Selected Request Detail View */
+              <>
+                <div style={{ marginBottom: '1rem' }}>
+                  <button className="btn btn-secondary btn-sm" style={{ color: 'var(--primary-color)', borderColor: 'var(--primary-color)' }} onClick={handleBackToRequests}>
+                    &larr; Back to Requests
+                  </button>
+                </div>
+
+                {/* Request Details Card */}
+                <div className="table-container request-detail-card" style={{ padding: '2rem', marginBottom: '1.5rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div>
+                      <h3 style={{ color: 'var(--primary-color)', marginBottom: '0.5rem' }}>{selectedRequest.title}</h3>
+                      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                        <span><strong>Student:</strong> {selectedRequest.full_name}</span>
+                        <span><strong>Roll No:</strong> {selectedRequest.roll_number}</span>
+                        <span><strong>Submitted:</strong> {selectedRequest.created_at ? new Date(selectedRequest.created_at).toLocaleString() : '-'}</span>
+                      </div>
+                    </div>
+                    <span className={`status-badge ${getRequestStatusClass(selectedRequest.status)}`}>
+                      {selectedRequest.status}
+                    </span>
+                  </div>
+                  <div className="request-description">
+                    <strong>Description:</strong>
+                    <p style={{ marginTop: '0.5rem', color: '#444', lineHeight: '1.6', background: '#f8f9fa', padding: '1rem', borderRadius: '8px' }}>
+                      {selectedRequest.description}
+                    </p>
+                  </div>
+
+                  {selectedRequest.attachment_path && (
+                    <div style={{ marginTop: '1rem' }}>
+                      <button
+                        onClick={() => handleDownloadAttachment(selectedRequest.id)}
+                        className="btn btn-secondary btn-sm"
+                        style={{ color: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
+                      >
+                        Download Attachment
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Student's Results (editable) */}
+                <div className="table-container" style={{ marginBottom: '1.5rem' }}>
+                  <div className="table-header">
+                    <h3>Student Results - {selectedRequest.full_name} ({selectedRequest.roll_number})</h3>
+                  </div>
+                  {sortedRequestKeys.length > 0 ? (
+                    sortedRequestKeys.map((key) => {
+                      const [y, s] = key.split('-');
+                      return (
+                        <div key={key} style={{ marginBottom: '1rem' }}>
+                          <h4 style={{ padding: '0.5rem 1.5rem', color: 'var(--primary-color)', background: '#f0f4ff', margin: 0 }}>
+                            Year {YEAR_LABELS[y]} - Semester {SEM_LABELS[s]}
+                          </h4>
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Code</th><th>Subject</th><th>Total Marks</th><th>Grade Pts</th><th>Grade</th><th>Status</th><th>Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {groupedRequestResults[key].map((result) => (
+                                editingResult === result.id ? (
+                                  <tr key={result.id} className="editing-row">
+                                    <td><input type="text" className="form-control table-input" value={editForm.subject_code} onChange={(e) => setEditForm({...editForm, subject_code: e.target.value})} /></td>
+                                    <td><input type="text" className="form-control table-input" value={editForm.subject_name} onChange={(e) => setEditForm({...editForm, subject_name: e.target.value})} /></td>
+                                    <td><input type="number" className="form-control table-input" value={editForm.total_marks} onChange={(e) => setEditForm({...editForm, total_marks: e.target.value})} /></td>
+                                    <td><input type="number" step="0.01" className="form-control table-input" value={editForm.grade_points} onChange={(e) => setEditForm({...editForm, grade_points: e.target.value})} /></td>
+                                    <td><input type="text" className="form-control table-input" value={editForm.grade} onChange={(e) => setEditForm({...editForm, grade: e.target.value})} /></td>
+                                    <td>
+                                      <select className="form-control table-input" value={editForm.status} onChange={(e) => setEditForm({...editForm, status: e.target.value})}>
+                                        <option value="PASS">PASS</option><option value="FAIL">FAIL</option><option value="AB">AB</option><option value="MP">MP</option>
+                                      </select>
+                                    </td>
+                                    <td>
+                                      <div style={{ display: 'flex', gap: '4px' }}>
+                                        <button className="btn btn-success btn-sm" onClick={saveEditResult}>Save</button>
+                                        <button className="btn btn-secondary btn-sm" style={{ color: '#666', borderColor: '#ccc' }} onClick={cancelEditResult}>Cancel</button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  <tr key={result.id}>
+                                    <td>{result.subject_code}</td>
+                                    <td>{result.subject_name}</td>
+                                    <td><strong>{result.total_marks}</strong></td>
+                                    <td>{result.grade_points}</td>
+                                    <td><span className={`grade-badge ${getGradeClass(result.grade)}`}>{result.grade}</span></td>
+                                    <td><span className={`status-badge ${getStatusClass(result.status)}`}>{result.status}</span></td>
+                                    <td>
+                                      <button className="btn btn-primary btn-sm" onClick={() => startEditResult(result)}>Edit</button>
+                                    </td>
+                                  </tr>
+                                )
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="no-data">
+                      <div className="no-data-icon">&#128196;</div>
+                      <h3>No Results Found</h3>
+                      <p>No results have been added for this student yet.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Admin Remarks & Resolve */}
+                {(selectedRequest.status === 'PENDING' || selectedRequest.status === 'IN_PROGRESS') && (
+                  <div className="table-container" style={{ padding: '2rem' }}>
+                    <h3 style={{ color: 'var(--primary-color)', marginBottom: '1rem' }}>Admin Response</h3>
+                    <div className="form-group">
+                      <label>Remarks (optional for resolve, required for reject)</label>
+                      <textarea
+                        className="form-control"
+                        rows="3"
+                        placeholder="Add your remarks about this correction request..."
+                        value={adminRemarks}
+                        onChange={(e) => setAdminRemarks(e.target.value)}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                      <button className="btn btn-success" onClick={() => handleResolveRequest(selectedRequest.id)}>
+                        Mark as Resolved
+                      </button>
+                      <button className="btn btn-danger" onClick={() => handleRejectRequest(selectedRequest.id)}>
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Show admin remarks for already resolved/rejected */}
+                {(selectedRequest.status === 'RESOLVED' || selectedRequest.status === 'REJECTED') && selectedRequest.admin_remarks && (
+                  <div className="table-container" style={{ padding: '2rem' }}>
+                    <h3 style={{ color: 'var(--primary-color)', marginBottom: '1rem' }}>Admin Remarks</h3>
+                    <p style={{ color: '#444', lineHeight: '1.6', background: '#f8f9fa', padding: '1rem', borderRadius: '8px' }}>
+                      {selectedRequest.admin_remarks}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* ===== USER MANAGEMENT TAB (merged Staff/Users + Settings) ===== */}
+        {activeTab === 'users' && (
+          <>
+            {/* Change Own Password */}
+            <div className="table-container" style={{ padding: '2rem', marginBottom: '1.5rem' }}>
+              <h3 style={{ color: 'var(--primary-color)', marginBottom: '1.5rem' }}>Change Your Password</h3>
+              <form onSubmit={handleChangePassword}>
+                <div className="form-group">
+                  <label>Current Password <span className="required">*</span></label>
+                  <input type="password" className="form-control" placeholder="Enter current password" value={passwordForm.current_password} onChange={(e) => setPasswordForm({...passwordForm, current_password: e.target.value})} required />
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>New Password <span className="required">*</span></label>
+                    <input type="password" className="form-control" placeholder="Min 6 characters" value={passwordForm.new_password} onChange={(e) => setPasswordForm({...passwordForm, new_password: e.target.value})} required />
+                  </div>
+                  <div className="form-group">
+                    <label>Confirm New Password <span className="required">*</span></label>
+                    <input type="password" className="form-control" placeholder="Re-enter new password" value={passwordForm.confirm_password} onChange={(e) => setPasswordForm({...passwordForm, confirm_password: e.target.value})} required />
+                  </div>
+                </div>
+                <button type="submit" className="form-submit">Change Password</button>
+              </form>
+            </div>
+
+            {/* Reset Student Password */}
+            <div className="table-container" style={{ padding: '2rem', marginBottom: '1.5rem' }}>
+              <h3 style={{ color: 'var(--primary-color)', marginBottom: '1.5rem' }}>Reset Student Password</h3>
+              <p style={{ color: '#666', marginBottom: '1rem', fontSize: '0.9rem' }}>If a student forgets their password, you can reset it here.</p>
+              <form onSubmit={handleResetStudentPassword}>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Student Roll Number <span className="required">*</span></label>
+                    <input type="text" className="form-control" placeholder="Enter roll number" value={resetForm.roll_number} onChange={(e) => setResetForm({...resetForm, roll_number: e.target.value})} required />
+                  </div>
+                  <div className="form-group">
+                    <label>New Password <span className="required">*</span></label>
+                    <input type="password" className="form-control" placeholder="Min 6 characters" value={resetForm.new_password} onChange={(e) => setResetForm({...resetForm, new_password: e.target.value})} required />
+                  </div>
+                </div>
+                <button type="submit" className="form-submit">Reset Password</button>
+              </form>
+            </div>
+
+            {/* Create Staff/Admin Users (super_admin only) */}
+            {isSuperAdmin && (
+              <>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => setShowCreateUser(!showCreateUser)}
+                  >
+                    {showCreateUser ? 'Cancel' : 'Create New Staff / Admin User'}
+                  </button>
+                </div>
+
+                {showCreateUser && (
+                  <div className="table-container" style={{ padding: '2rem', marginBottom: '1.5rem' }}>
+                    <h3 style={{ color: 'var(--primary-color)', marginBottom: '1.5rem' }}>Create Staff / Admin Account</h3>
+                    <form onSubmit={handleCreateUser}>
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>Username <span className="required">*</span></label>
+                          <input type="text" className="form-control" placeholder="Login username" value={newUserForm.username} onChange={(e) => setNewUserForm({...newUserForm, username: e.target.value})} required />
+                        </div>
+                        <div className="form-group">
+                          <label>Full Name <span className="required">*</span></label>
+                          <input type="text" className="form-control" placeholder="Full name" value={newUserForm.full_name} onChange={(e) => setNewUserForm({...newUserForm, full_name: e.target.value})} required />
+                        </div>
+                      </div>
+                      <div className="form-row">
+                        <div className="form-group">
+                          <label>Password <span className="required">*</span></label>
+                          <input type="password" className="form-control" placeholder="Min 6 characters" value={newUserForm.password} onChange={(e) => setNewUserForm({...newUserForm, password: e.target.value})} required />
+                        </div>
+                        <div className="form-group">
+                          <label>Role <span className="required">*</span></label>
+                          <select className="form-control" value={newUserForm.role} onChange={(e) => setNewUserForm({...newUserForm, role: e.target.value})} required>
+                            <option value="staff">Staff (view-only)</option>
+                            <option value="admin">Admin (full access)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label>Permissions (optional)</label>
+                        <input type="text" className="form-control" placeholder="e.g., view_results,edit_results,manage_students" value={newUserForm.permissions} onChange={(e) => setNewUserForm({...newUserForm, permissions: e.target.value})} />
+                        <small style={{ color: '#888', fontSize: '0.8rem' }}>Comma-separated list of permissions. Leave empty for default role permissions.</small>
+                      </div>
+                      <button type="submit" className="form-submit">Create User</button>
+                    </form>
+                  </div>
+                )}
+
+                <div className="table-container">
+                  <div className="table-header">
+                    <h3>Admin & Staff Users</h3>
+                  </div>
+                  {usersLoading ? (
+                    <div className="loading"><div className="spinner"></div></div>
+                  ) : adminUsers.length > 0 ? (
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th><th>Username</th><th>Full Name</th><th>Role</th><th>Permissions</th><th>Created</th><th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adminUsers.map((u, idx) => (
+                          <tr key={u.id}>
+                            <td>{idx + 1}</td>
+                            <td><strong>{u.username}</strong></td>
+                            <td>{u.full_name || '-'}</td>
+                            <td>
+                              <span className={`status-badge ${u.role === 'super_admin' ? 'status-pass' : u.role === 'admin' ? 'status-other' : ''}`}>
+                                {u.role === 'super_admin' ? 'Super Admin' : u.role === 'admin' ? 'Admin' : 'Staff'}
+                              </span>
+                            </td>
+                            <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.permissions || 'Default'}</td>
+                            <td>{u.created_at ? new Date(u.created_at).toLocaleDateString() : '-'}</td>
+                            <td>
+                              {u.username !== 'admin' ? (
+                                <button className="btn btn-danger btn-sm" onClick={() => handleDeleteUser(u.id, u.username)}>
+                                  Delete
+                                </button>
+                              ) : (
+                                <span style={{ color: '#999', fontSize: '0.8rem' }}>Protected</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="no-data">
+                      <div className="no-data-icon">&#128100;</div>
+                      <h3>No Additional Users</h3>
+                      <p>Only the default admin account exists. Create staff accounts above.</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      <footer className="footer">
+        <p>&copy; {new Date().getFullYear()} Sri Padmavati Mahila Visvavidyalayam, Tirupati.</p>
+      </footer>
+    </>
+  );
+}
+
+export default AdminDashboard;

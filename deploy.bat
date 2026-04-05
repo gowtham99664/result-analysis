@@ -14,15 +14,15 @@ REM ================================================================
 
 setlocal enabledelayedexpansion
 
-set DB_CONTAINER=spmvv-db
-set BACKEND_CONTAINER=spmvv-backend
-set FRONTEND_CONTAINER=spmvv-frontend
-set NETWORK_NAME=spmvv-network
-set DB_VOLUME=spmvv-mysql-data
+set DB_CONTAINER=soet-db
+set BACKEND_CONTAINER=soet-backend
+set FRONTEND_CONTAINER=soet-frontend
+set NETWORK_NAME=soet-network
+set DB_VOLUME=soet-mysql-data
 
 set DB_IMAGE=mariadb:10.11
-set BACKEND_IMAGE=spmvv-backend:latest
-set FRONTEND_IMAGE=spmvv-frontend:latest
+set BACKEND_IMAGE=soet-backend:latest
+set FRONTEND_IMAGE=soet-frontend:latest
 
 set DB_PASSWORD=spmvv_root_2024
 set DB_NAME=result_analysis
@@ -243,7 +243,7 @@ echo   Application URL: http://localhost:%APP_PORT%
 echo   Admin Login:     username: admin ^| password: admin123
 echo.
 echo   Container Status:
-docker ps --format "  {{.Names}}	{{.Status}}	{{.Ports}}" --filter "name=spmvv" 2>nul
+docker ps --format "  {{.Names}}	{{.Status}}	{{.Ports}}" --filter "name=soet" 2>nul
 echo.
 echo ================================================================
 

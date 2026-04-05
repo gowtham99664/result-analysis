@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 import Navbar from '../components/Navbar';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell, BarChart, Bar,
+} from 'recharts';
 
 const API_URL = window.location.origin + '/api';
 
@@ -53,7 +57,7 @@ function StudentDashboard() {
   // Add subject to saved results
   const [showAddSubject, setShowAddSubject] = useState(null); // semester key e.g. "1-2"
   const [addSubjectForm, setAddSubjectForm] = useState({
-    subject_code: '', subject_name: '', year: '', semester: '',
+    subject_code: '', subject_name: '', year: '', semester: '', credits: 3,
   });
   const [addingSubject, setAddingSubject] = useState(false);
 
@@ -249,12 +253,16 @@ function StudentDashboard() {
   };
 
   const handleEditParsedField = (semIdx, subjIdx, field, value) => {
-    // Only allow editing: subject_code, subject_name
-    const editable = ['subject_code', 'subject_name'];
+    // Only allow editing: subject_code, subject_name, credits
+    const editable = ['subject_code', 'subject_name', 'credits'];
     if (!editable.includes(field)) return;
 
     const updated = { ...parsedData };
-    updated.semesters[semIdx].subjects[subjIdx][field] = value;
+    if (field === 'credits') {
+      updated.semesters[semIdx].subjects[subjIdx][field] = parseInt(value) || 3;
+    } else {
+      updated.semesters[semIdx].subjects[subjIdx][field] = value;
+    }
     setParsedData(updated);
   };
 
@@ -277,6 +285,7 @@ function StudentDashboard() {
     updated.semesters[semIdx].subjects.push({
       subject_code: '',
       subject_name: '',
+      credits: 3,
       internal_marks: 0,
       external_marks: 0,
       total_marks: 0,
@@ -292,6 +301,16 @@ function StudentDashboard() {
     const updated = { ...parsedData };
     updated.semesters[semIdx].subjects.splice(subjIdx, 1);
     updated.total_subjects = Math.max(0, (updated.total_subjects || 1) - 1);
+    setParsedData(updated);
+  };
+
+  const handleMoveSubject = (semIdx, subjIdx, direction) => {
+    const updated = { ...parsedData };
+    const subjects = [...updated.semesters[semIdx].subjects];
+    const newIdx = direction === 'up' ? subjIdx - 1 : subjIdx + 1;
+    if (newIdx < 0 || newIdx >= subjects.length) return;
+    [subjects[subjIdx], subjects[newIdx]] = [subjects[newIdx], subjects[subjIdx]];
+    updated.semesters[semIdx].subjects = subjects;
     setParsedData(updated);
   };
 
@@ -409,7 +428,7 @@ function StudentDashboard() {
   // Open add subject form for a specific semester
   const handleOpenAddSubject = (semKey) => {
     const [y, s] = semKey.split('-');
-    setAddSubjectForm({ subject_code: '', subject_name: '', year: y, semester: s });
+    setAddSubjectForm({ subject_code: '', subject_name: '', year: y, semester: s, credits: 3 });
     setShowAddSubject(semKey);
     setShowCorrectionForm(null); // close correction form if open
   };
@@ -426,12 +445,25 @@ function StudentDashboard() {
       await axios.post(`${API_URL}/student/add-subject`, addSubjectForm, { headers });
       toast.success('Subject added successfully! Admin can update the marks.');
       setShowAddSubject(null);
-      setAddSubjectForm({ subject_code: '', subject_name: '', year: '', semester: '' });
+      setAddSubjectForm({ subject_code: '', subject_name: '', year: '', semester: '', credits: 3 });
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to add subject');
     } finally {
       setAddingSubject(false);
+    }
+  };
+
+  // Reorder saved results (move up/down via API)
+  const handleReorderSaved = async (resultId, direction) => {
+    try {
+      await axios.put(`${API_URL}/student/reorder-subjects`, {
+        result_id: resultId,
+        direction: direction,
+      }, { headers });
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Failed to reorder');
     }
   };
 
@@ -600,7 +632,7 @@ function StudentDashboard() {
               </div>
 
               <div className="parsed-notice">
-                <strong>Review the extracted data below.</strong> You can edit Subject Code, Subject Name, Year, Semester, and Academic Year. Marks, grade points, and grades can only be edited by the admin. If a subject is missing, click "+ Add Missing Subject" to add it. If marks are wrong, submit a correction request after saving.
+                <strong>Review the extracted data below.</strong> You can edit Subject Code, Subject Name, Credits, Year, Semester, and Academic Year. Marks, grade points, and grades can only be edited by the admin. If a subject is missing, click "+ Add Missing Subject" to add it. If marks are wrong, submit a correction request after saving.
               </div>
 
               {parsedData.semesters.map((sem, semIdx) => (
@@ -653,8 +685,10 @@ function StudentDashboard() {
                     <table>
                       <thead>
                         <tr>
+                          <th style={{width: '60px'}}>Order</th>
                           <th>Code</th>
                           <th>Subject Name</th>
+                          <th>Credits</th>
                           <th>Total Marks</th>
                           <th>Grade Pts</th>
                           <th>Grade</th>
@@ -665,6 +699,22 @@ function StudentDashboard() {
                       <tbody>
                         {sem.subjects.map((subj, subjIdx) => (
                           <tr key={subjIdx} className={subj.status === 'FAIL' ? 'fail-row' : ''}>
+                            <td>
+                              <div className="reorder-btns">
+                                <button
+                                  className="btn-move"
+                                  title="Move up"
+                                  onClick={() => handleMoveSubject(semIdx, subjIdx, 'up')}
+                                  disabled={subjIdx === 0}
+                                >&#9650;</button>
+                                <button
+                                  className="btn-move"
+                                  title="Move down"
+                                  onClick={() => handleMoveSubject(semIdx, subjIdx, 'down')}
+                                  disabled={subjIdx === sem.subjects.length - 1}
+                                >&#9660;</button>
+                              </div>
+                            </td>
                             <td>
                               <input
                                 type="text"
@@ -679,6 +729,17 @@ function StudentDashboard() {
                                 className="inline-edit-input wide"
                                 value={subj.subject_name}
                                 onChange={(e) => handleEditParsedField(semIdx, subjIdx, 'subject_name', e.target.value)}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                className="inline-edit-input"
+                                style={{ width: '50px' }}
+                                min="1"
+                                max="6"
+                                value={subj.credits || 3}
+                                onChange={(e) => handleEditParsedField(semIdx, subjIdx, 'credits', e.target.value)}
                               />
                             </td>
                             <td className="readonly-cell"><strong>{subj.total_marks}</strong></td>
@@ -751,6 +812,81 @@ function StudentDashboard() {
             )}
           </div>
         </div>
+
+        {/* Charts Section */}
+        {semesterSummaries.length > 0 && (
+          <div className="charts-section" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+            {/* SGPA Trend Line Chart */}
+            <div className="table-container" style={{ padding: '1.5rem' }}>
+              <h3 style={{ color: 'var(--primary-color)', marginBottom: '1rem', fontSize: '1rem' }}>SGPA Trend</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={semesterSummaries.map(ss => ({
+                  name: `Y${ss.year}-S${ss.semester}`,
+                  SGPA: parseFloat(ss.sgpa) || 0,
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" fontSize={12} />
+                  <YAxis domain={[0, 10]} fontSize={12} />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="SGPA" stroke="#1a237e" strokeWidth={2} dot={{ r: 5 }} activeDot={{ r: 7 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Grade Distribution Pie Chart */}
+            <div className="table-container" style={{ padding: '1.5rem' }}>
+              <h3 style={{ color: 'var(--primary-color)', marginBottom: '1rem', fontSize: '1rem' }}>Grade Distribution</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={(() => {
+                      const gradeCounts = {};
+                      results.forEach(r => {
+                        const g = r.grade || 'N/A';
+                        gradeCounts[g] = (gradeCounts[g] || 0) + 1;
+                      });
+                      return Object.entries(gradeCounts).map(([grade, count]) => ({
+                        name: grade, value: count,
+                      }));
+                    })()}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    label={({ name, value }) => `${name}(${value})`}
+                    labelLine={true}
+                    dataKey="value"
+                  >
+                    {['#4caf50','#8bc34a','#cddc39','#ffc107','#ff9800','#ff5722','#f44336','#9e9e9e'].map((color, i) => (
+                      <Cell key={i} fill={color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Pass/Fail per Semester Bar Chart */}
+            <div className="table-container" style={{ padding: '1.5rem' }}>
+              <h3 style={{ color: 'var(--primary-color)', marginBottom: '1rem', fontSize: '1rem' }}>Pass / Fail per Semester</h3>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={semesterSummaries.map(ss => ({
+                  name: `Y${ss.year}-S${ss.semester}`,
+                  Passed: ss.passed_subjects || 0,
+                  Failed: ss.failed_subjects || 0,
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" fontSize={12} />
+                  <YAxis fontSize={12} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="Passed" fill="#4caf50" />
+                  <Bar dataKey="Failed" fill="#f44336" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="stats-grid">
@@ -842,23 +978,44 @@ function StudentDashboard() {
                 <table>
                   <thead>
                     <tr>
+                      <th style={{width: '60px'}}>Order</th>
                       <th>Code</th>
                       <th>Subject</th>
+                      <th>Credits</th>
                       <th>Total Marks</th>
                       <th>Grade Pts</th>
                       <th>Grade</th>
                       <th>Status</th>
+                      <th>Attempts</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {groupedResults[key].map((result) => (
+                    {groupedResults[key].map((result, rIdx) => (
                       <tr key={result.id} className={result.status === 'FAIL' ? 'fail-row' : ''}>
+                        <td>
+                          <div className="reorder-btns">
+                            <button
+                              className="btn-move"
+                              title="Move up"
+                              onClick={() => handleReorderSaved(result.id, 'up')}
+                              disabled={rIdx === 0}
+                            >&#9650;</button>
+                            <button
+                              className="btn-move"
+                              title="Move down"
+                              onClick={() => handleReorderSaved(result.id, 'down')}
+                              disabled={rIdx === groupedResults[key].length - 1}
+                            >&#9660;</button>
+                          </div>
+                        </td>
                         <td>{result.subject_code}</td>
                         <td>{result.subject_name}</td>
+                        <td>{result.credits || 3}</td>
                         <td><strong>{result.total_marks}</strong></td>
                         <td>{result.grade_points}</td>
                         <td><span className={`grade-badge ${getGradeClass(result.grade)}`}>{result.grade}</span></td>
                         <td><span className={`status-badge ${getStatusClass(result.status)}`}>{result.status}</span></td>
+                        <td>{result.attempts || 1}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -877,6 +1034,10 @@ function StudentDashboard() {
                         <div className="form-group">
                           <label>Subject Name <span className="required">*</span></label>
                           <input type="text" className="form-control" placeholder="e.g., Data Structures" value={addSubjectForm.subject_name} onChange={(e) => setAddSubjectForm({...addSubjectForm, subject_name: e.target.value})} required />
+                        </div>
+                        <div className="form-group" style={{ maxWidth: '100px' }}>
+                          <label>Credits</label>
+                          <input type="number" className="form-control" min="1" max="6" value={addSubjectForm.credits} onChange={(e) => setAddSubjectForm({...addSubjectForm, credits: parseInt(e.target.value) || 3})} />
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -945,9 +1106,11 @@ function StudentDashboard() {
                   <th>Sem</th>
                   <th>Code</th>
                   <th>Subject</th>
+                  <th>Credits</th>
                   <th>Total Marks</th>
                   <th>Grade</th>
                   <th>Status</th>
+                  <th>Attempts</th>
                 </tr>
               </thead>
               <tbody>
@@ -957,9 +1120,11 @@ function StudentDashboard() {
                     <td>{SEM_LABELS[ps.semester]}</td>
                     <td>{ps.subject_code}</td>
                     <td>{ps.subject_name}</td>
+                    <td>{ps.credits || 3}</td>
                     <td>{ps.total_marks}</td>
                     <td><span className={`grade-badge ${getGradeClass(ps.grade)}`}>{ps.grade}</span></td>
                     <td><span className="status-badge status-fail">{ps.status}</span></td>
+                    <td>{ps.attempts || 1}</td>
                   </tr>
                 ))}
               </tbody>

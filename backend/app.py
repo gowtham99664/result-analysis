@@ -18,8 +18,48 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from datetime import timedelta, datetime
 import pdfplumber
-import pytesseract
 from PIL import Image
+import numpy as np
+import logging
+import sys
+
+# Configure logging to go to stdout/stderr (captured by docker logs)
+# Use force=True to override gunicorn's logging config
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stderr,
+    force=True,
+)
+logger = logging.getLogger(__name__)
+
+# Also ensure Flask/gunicorn doesn't suppress our logger
+logger.setLevel(logging.INFO)
+_handler = logging.StreamHandler(sys.stderr)
+_handler.setLevel(logging.INFO)
+_handler.setFormatter(
+    logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+)
+logger.addHandler(_handler)
+logger.propagate = True
+
+# Initialize PaddleOCR engine once at module level
+# Without --preload, this runs in the worker process directly (no fork issues)
+from paddleocr import PaddleOCR as _PaddleOCR
+
+logger.info("Initializing PaddleOCR engine...")
+_paddle_ocr_engine = _PaddleOCR(
+    use_angle_cls=True,
+    lang="en",
+    show_log=False,
+)
+logger.info("PaddleOCR engine initialized successfully")
+
+
+def get_paddle_ocr():
+    """Return the pre-initialized PaddleOCR engine."""
+    return _paddle_ocr_engine
+
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -170,28 +210,29 @@ def calculate_grade_from_marks(total_marks, parsed_grade=""):
 
     If total_marks <= 40 and parsed OCR grade is 'F' or 'AB', preserve it.
     Otherwise derive grade purely from marks:
-      91-100 -> O (10), 81-90 -> A (9), 71-80 -> B (8), 61-70 -> C (7),
-      51-60 -> D (6), 41-50 -> P (5), <=40 -> F (0).
+      90-100 -> O (10), 80-89 -> A (9), 70-79 -> B (8), 60-69 -> C (7),
+      50-59 -> D (6), 40-49 -> P (5), <40 -> F (0).
+    S-grade subjects are handled separately (not through this function).
     """
     try:
         marks = int(total_marks)
     except (TypeError, ValueError):
         marks = 0
 
-    if marks >= 91:
+    if marks >= 90:
         return "O", 10.0
-    elif marks >= 81:
+    elif marks >= 80:
         return "A", 9.0
-    elif marks >= 71:
+    elif marks >= 70:
         return "B", 8.0
-    elif marks >= 61:
+    elif marks >= 60:
         return "C", 7.0
-    elif marks >= 51:
+    elif marks >= 50:
         return "D", 6.0
-    elif marks >= 41:
+    elif marks >= 40:
         return "P", 5.0
     else:
-        # For marks <= 40: check parsed OCR grade for F vs AB distinction
+        # For marks < 40: check parsed OCR grade for F vs AB distinction
         pg = (parsed_grade or "").strip().upper()
         if pg == "AB":
             return "AB", 0.0
@@ -364,29 +405,33 @@ def normalize_subject_code(raw_code):
 def parse_ocr_subjects(text):
     """
     Parse subjects from OCR text of SPMVV marks memo.
-    Handles both word-form marks and numeric marks.
-    Returns a list of subject dicts with internal_marks, external_marks,
-    total_marks, grade_points, and grade.
 
-    Key design:
-    - Subject codes may be on their own line, with name and marks on subsequent lines
-    - Blank lines between code/name/marks are common in OCR output
-    - Looks ahead up to 5 raw lines (skipping blanks) to find name and marks
-    - Marks are typically in WORD FORM (e.g., "SIX NINE" = 69)
-    - Numeric columns (credits, internal, external) appear between name and word marks
-    - Grade appears as a standalone letter (O, A+, A, B+, B, C, D, F, AB)
-    - Grade points are computed from grade using SPMVV grading scale
+    PaddleOCR produces clean, well-structured lines like:
+      20BST04 Engineering Mathematics-1 4 22 41 63 7.0 C SIX THREE
+    Columns: code | name | credits | internal | external | total | gp | grade | words
+
+    Some subjects span 2 lines (name wraps), e.g.:
+      20CSS02 Skill Oriented Course 2 (PHP-Hypertext Preprocessor Lab) 2 23 31 54 6.0 D FIVE FOUR
+
+    Some lab subjects omit credits column (it's embedded differently):
+      20BSP01 Communicative English Lab 30 47 77 8.0 B SEVEN SEVEN
+
+    Strategy:
+    1. Find all subject code positions
+    2. For each code, collect text until the next code or stop-keyword
+    3. Parse the numeric tail: find the rightmost sequence of numbers that
+       represents [credits] internal external total [gp] [grade] [word marks]
+    4. Everything between the code and the numeric tail is the subject name
     """
     subjects = []
     lines = text.split("\n")
 
-    # Subject code pattern: starts with 2, then 0/O, then 2-4 letters, then 1-3 alphanumeric
-    # Allow leading punctuation (OCR artifacts like ' or -)
+    # Subject code pattern
     code_pattern = re.compile(
         r"['\"\-\s]*\b(2[0O][A-Z]{2,4}[A-Z0-9O][0-9O]{0,2})\b", re.IGNORECASE
     )
 
-    # Skip keywords for first-pass (detecting code lines) — aggressive filtering
+    # Skip lines that are headers/footers
     skip_keywords = [
         "paper code",
         "paper title",
@@ -407,24 +452,20 @@ def parse_ocr_subjects(text):
         "gpa",
         "written by",
         "compared by",
-        "note :",
+        "note ",
         "descre",
         "theory subjects",
         "practical subjects",
         "examination",
-        "internal",
         "ext. exam",
-        "in words",
         "in figures",
         "satisfactory",
-        "tirup",
         "weighted average",
         "marks in words",
+        "controller",
     ]
 
-    # Content-stop keywords: only these stop content collection after a code
-    # (more conservative — don't stop on "in words" / "in figures" which appear
-    # in the memo footer near the last subject on each page)
+    # Stop collecting content for a subject when these are seen
     content_stop_keywords = [
         "paper code",
         "paper title",
@@ -444,47 +485,42 @@ def parse_ocr_subjects(text):
         "gpa",
         "written by",
         "compared by",
-        "note :",
+        "note ",
         "descre",
         "theory subjects",
         "practical subjects",
         "satisfactory",
         "weighted average",
         "in figures",
+        "controller",
     ]
 
     # Valid grades
-    grade_set = {"O", "A", "B", "C", "D", "P", "F", "AB"}
+    grade_set = {"O", "A", "B", "C", "D", "P", "F", "AB", "S"}
 
-    # SPMVV Grade-to-GradePoints mapping
-    grade_to_gp = {
-        "O": 10.0,
-        "A": 9.0,
-        "B": 8.0,
-        "C": 7.0,
-        "D": 6.0,
-        "P": 5.0,
-        "F": 0.0,
-        "AB": 0.0,
+    # Word-to-number mapping
+    word_nums = {
+        "ZERO": 0,
+        "ONE": 1,
+        "TWO": 2,
+        "THREE": 3,
+        "FOUR": 4,
+        "FIVE": 5,
+        "SIX": 6,
+        "SEVEN": 7,
+        "EIGHT": 8,
+        "NINE": 9,
     }
-
-    # Word-form marks pattern (at least 2 number words)
-    word_marks_pattern = re.compile(
-        r"((?:ZERO|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE)"
-        r"(?:\s+(?:ZERO|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE))+)",
-        re.IGNORECASE,
-    )
 
     def is_skip_line(line):
         ll = line.lower()
         return any(kw in ll for kw in skip_keywords)
 
     def is_content_stop(line):
-        """Check if a line should stop content collection (more conservative)."""
         ll = line.lower()
         return any(kw in ll for kw in content_stop_keywords)
 
-    # First pass: find all lines with subject codes and their positions
+    # Find all lines with subject codes
     code_lines = []
     for idx, raw_line in enumerate(lines):
         line = clean_text_line(raw_line)
@@ -496,12 +532,11 @@ def parse_ocr_subjects(text):
         if m:
             code_lines.append((idx, m))
 
-    # Second pass: for each code, collect text until the next code
+    # For each code, collect text and parse
     for ci, (code_idx, code_match) in enumerate(code_lines):
         raw_code = code_match.group(1)
         subject_code = normalize_subject_code(raw_code)
 
-        # Validate: should start with "20" after normalization
         if not subject_code.startswith("20"):
             continue
 
@@ -509,252 +544,289 @@ def parse_ocr_subjects(text):
         after_code = current_line[code_match.end() :].strip()
         after_code = re.sub(r"^[\s|]+", "", after_code)
 
-        # Determine the boundary: next code line or end
+        # Boundary: next code line or end
         if ci + 1 < len(code_lines):
             next_code_idx = code_lines[ci + 1][0]
         else:
             next_code_idx = len(lines)
 
-        # Collect non-blank, non-skip lines between this code and the next
+        # Collect continuation lines (for wrapped subject names)
+        # Key insight: if the main line already has word marks (SIX THREE etc.) at the
+        # end, it's a complete line. Continuation lines are just wrapped name parts.
+        # If the main line does NOT have word marks, continuation lines may contain
+        # the marks data.
+        word_marks_check = re.compile(
+            r"(?:ZERO|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE)"
+            r"(?:[\s.]+(?:ZERO|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE))*\s*$",
+            re.IGNORECASE,
+        )
+        main_line_complete = bool(after_code and word_marks_check.search(after_code))
+
         collected_parts = [after_code] if after_code else []
-        content_lines_seen = 0
-        max_content_lines = 5  # increased from 4 to catch more content
-        for li in range(code_idx + 1, min(next_code_idx, code_idx + 10)):
+        name_continuations = []  # Text-only continuations for the subject name
+
+        for li in range(code_idx + 1, min(next_code_idx, code_idx + 5)):
             raw = clean_text_line(lines[li])
             if not raw or len(raw) < 2:
-                continue  # skip blanks — don't count
+                continue
             if is_content_stop(raw):
                 break
-            collected_parts.append(raw)
-            content_lines_seen += 1
-            # Stop if we found word marks
-            if word_marks_pattern.search(raw):
-                break
-            if content_lines_seen >= max_content_lines:
-                break
-
-        combined = " ".join(collected_parts)
-
-        # OCR fuzzy correction for garbled number words
-        # Common OCR misreads: stx→SIX, OUR→FOUR, BIGHT→EIGHT, HINE→NINE, etc.
-        ocr_word_fixes = {
-            r"\bstx\b": "SIX",
-            r"\bslx\b": "SIX",
-            r"\bs[1l]x\b": "SIX",
-            r"\bOUR\b": "FOUR",  # context: standalone OUR near number words
-            r"\bBIGHT\b": "EIGHT",
-            r"\bEIGHI\b": "EIGHT",
-            r"\bHINE\b": "NINE",
-            r"\bNINB\b": "NINE",
-            r"\bFIVB\b": "FIVE",
-            r"\bTHREF\b": "THREE",
-            r"\bSEVBN\b": "SEVEN",
-            r"\bSBVEN\b": "SEVEN",
-            r"\bZBRO\b": "ZERO",
-            r"\bZER0\b": "ZERO",
-            r"\bTW0\b": "TWO",
-            r"\bF0UR\b": "FOUR",
-        }
-        fixed_combined = combined
-        for pat, replacement in ocr_word_fixes.items():
-            fixed_combined = re.sub(
-                pat, replacement, fixed_combined, flags=re.IGNORECASE
-            )
-
-        # Extract marks in word form
-        subject_name = ""
-        grade = ""
-        total_marks = None
-        internal_marks = 0
-        external_marks = 0
-        grade_points = 0.0
-
-        wm = word_marks_pattern.search(fixed_combined)
-        if wm:
-            candidate_marks = words_to_number(wm.group(1))
-            # Sanity check: single subject marks should be 0-100
-            # Values > 100 are likely page totals (e.g., 590/800)
-            if candidate_marks is not None and 0 <= candidate_marks <= 100:
-                total_marks = candidate_marks
-                before_marks = fixed_combined[: wm.start()].strip()
-                after_word_marks = fixed_combined[wm.end() :].strip()
+            if main_line_complete:
+                # Main line is already complete with marks data.
+                # This continuation line is just a wrapped name part (e.g., "Practices Lab")
+                # Only add if it's mostly alphabetic (a name, not numbers)
+                alpha_ratio = sum(1 for c in raw if c.isalpha()) / max(len(raw), 1)
+                if alpha_ratio > 0.5:
+                    name_continuations.append(raw)
             else:
-                # Rejected word marks (too high) — still strip them from name
-                before_marks = fixed_combined[: wm.start()].strip()
-                after_word_marks = ""
-        else:
-            before_marks = combined
-            after_word_marks = ""
+                collected_parts.append(raw)
+                # Check if this line completes the data
+                if word_marks_check.search(raw):
+                    main_line_complete = True
 
-        # Extract grade: only check for AB (absent) from OCR text
-        # All other grades are calculated from total marks
-        grade_search_text = before_marks + " " + after_word_marks
+        combined = " ".join(collected_parts).strip()
+
+        # ======== Parse the combined text ========
+        # The line after the code typically looks like:
+        #   "Engineering Mathematics-1 4 22 41 63 7.0 C SIX THREE"
+        # or for labs with no explicit credits:
+        #   "Communicative English Lab 30 47 77 8.0 B SEVEN SEVEN"
+
+        # Step 1: Remove trailing word marks (ZERO ONE TWO ... NINE words at end)
+        word_marks_pattern = re.compile(
+            r"\s+((?:ZERO|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE)"
+            r"(?:[\s.]+(?:ZERO|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE))*)\s*$",
+            re.IGNORECASE,
+        )
+        word_marks_str = ""
+        wm = word_marks_pattern.search(combined)
+        if wm:
+            word_marks_str = wm.group(1)
+            combined = combined[: wm.start()].strip()
+
+        # Step 2: Remove trailing grade letter (O, A, B, C, D, P, F, AB, S)
         ocr_grade = ""
-        # Only look for AB — indicates absent
-        ab_match = re.search(r"(?:^|\s|\|)\s*(AB)\s*(?:\s|\||$)", grade_search_text)
-        if ab_match:
-            ocr_grade = "AB"
+        grade_at_end = re.search(r"\s+(AB|[OABCDPFS])\s*$", combined, re.IGNORECASE)
+        if grade_at_end:
+            g = grade_at_end.group(1).upper()
+            if g in grade_set:
+                ocr_grade = g
+                combined = combined[: grade_at_end.start()].strip()
 
-        # Calculate grade and grade_points from total marks
-        if total_marks is not None:
+        # Step 3: Remove trailing grade points (e.g., "7.0", "10", "8.0.")
+        grade_points_val = 0.0
+        gp_at_end = re.search(r"\s+(\d{1,2}(?:\.\d+)?)\s*\.?\s*$", combined)
+        if gp_at_end:
+            try:
+                gp = float(gp_at_end.group(1))
+                if 0.0 <= gp <= 10.0:
+                    grade_points_val = gp
+                    combined = combined[: gp_at_end.start()].strip()
+            except ValueError:
+                pass
+
+        # Step 4: Extract trailing numeric marks (total, external, internal, credits)
+        # Pattern: the remaining text ends with numbers like "4 22 41 63" or "30 47 77"
+        # We work from right to left
+        total_marks = 0
+        external_marks = 0
+        internal_marks = 0
+        credits = 3  # default
+
+        # Find trailing numbers
+        trailing_nums = re.findall(r"\b(\d{1,3})\b", combined)
+        trailing_nums_int = [int(n) for n in trailing_nums]
+
+        # Count how many trailing tokens are numeric (from the right)
+        tokens = combined.split()
+        num_count_from_right = 0
+        for t in reversed(tokens):
+            # Check if token is a number (possibly with OCR artifacts like ' or .)
+            cleaned_t = re.sub(r"['\.\,]", "", t)
+            if cleaned_t.isdigit():
+                num_count_from_right += 1
+            else:
+                break
+
+        if num_count_from_right >= 3:
+            # Get the last N numeric tokens
+            numeric_tokens = []
+            name_tokens = []
+            found_name_end = False
+            for t in tokens:
+                cleaned_t = re.sub(r"['\.\,]", "", t)
+                if not found_name_end:
+                    # Still in name area — check if this starts the numeric tail
+                    remaining = tokens[tokens.index(t) :]
+                    remaining_count = sum(
+                        1 for r in remaining if re.sub(r"['\.\,]", "", r).isdigit()
+                    )
+                    # If all remaining tokens are numeric, we've found the boundary
+                    if remaining_count == len(remaining) and len(remaining) >= 3:
+                        found_name_end = True
+                        numeric_tokens.append(int(re.sub(r"['\.\,]", "", t)))
+                    else:
+                        name_tokens.append(t)
+                else:
+                    cleaned_t2 = re.sub(r"['\.\,]", "", t)
+                    if cleaned_t2.isdigit():
+                        numeric_tokens.append(int(cleaned_t2))
+                    else:
+                        name_tokens.append(t)
+
+            nums = numeric_tokens
+            subject_name = " ".join(name_tokens).strip()
+
+            # Parse numeric columns based on count
+            if len(nums) == 4:
+                # credits internal external total
+                credits, internal_marks, external_marks, total_marks = nums
+            elif len(nums) == 3:
+                # No explicit credits: internal external total (labs often)
+                internal_marks, external_marks, total_marks = nums
+            elif len(nums) == 2:
+                # external total? or internal total?
+                external_marks, total_marks = nums
+            elif len(nums) == 1:
+                total_marks = nums[0]
+        elif num_count_from_right >= 1:
+            # Only 1-2 numbers at end — try to extract what we can
+            name_tokens = (
+                tokens[:-num_count_from_right] if num_count_from_right > 0 else tokens
+            )
+            num_tokens = (
+                tokens[-num_count_from_right:] if num_count_from_right > 0 else []
+            )
+            subject_name = " ".join(name_tokens).strip()
+            nums = [
+                int(re.sub(r"['\.\,]", "", t))
+                for t in num_tokens
+                if re.sub(r"['\.\,]", "", t).isdigit()
+            ]
+            if len(nums) == 1:
+                total_marks = nums[0]
+            elif len(nums) == 2:
+                external_marks, total_marks = nums
+        else:
+            # No trailing numbers — just use the combined text as name
+            subject_name = combined.strip()
+
+        # Clean up subject name
+        subject_name = re.sub(r"^[^A-Za-z]+", "", subject_name).strip()
+        subject_name = re.sub(r"[^A-Za-z0-9)\s.&/(-]+$", "", subject_name).strip()
+        subject_name = re.sub(r"\s+", " ", subject_name).strip()
+
+        # Append wrapped name continuations (e.g., "Practices Lab")
+        if name_continuations:
+            continuation_text = " ".join(name_continuations).strip()
+            # Clean continuation text
+            continuation_text = re.sub(r"^[^A-Za-z]+", "", continuation_text).strip()
+            continuation_text = re.sub(
+                r"[^A-Za-z0-9)\s.&/(-]+$", "", continuation_text
+            ).strip()
+            if continuation_text:
+                subject_name = subject_name + " " + continuation_text
+
+        if not subject_name:
+            subject_name = subject_code
+
+        # Validate credits
+        if credits < 1 or credits > 6:
+            credits = 3  # default
+
+        # Validate total marks
+        if total_marks > 100:
+            total_marks = 0
+        if internal_marks > 40:
+            internal_marks = 0
+        if external_marks > 70:
+            external_marks = 0
+
+        # If internal + external don't match total, recompute if possible
+        if internal_marks > 0 and external_marks > 0:
+            computed_total = internal_marks + external_marks
+            if total_marks == 0:
+                total_marks = computed_total
+            elif abs(computed_total - total_marks) > 2:
+                # Mismatch — trust total_marks, zero out internal/external
+                internal_marks = 0
+                external_marks = 0
+
+        # Calculate grade from marks (with OCR grade for cross-verification)
+        grade = ""
+        grade_points = 0.0
+        # S-grade (Satisfactory) subjects: store as-is, excluded from SGPA later
+        if ocr_grade == "S":
+            grade = "S"
+            grade_points = 0.0
+        elif total_marks > 0:
             grade, grade_points = calculate_grade_from_marks(total_marks, ocr_grade)
         elif ocr_grade == "AB":
             grade = "AB"
             grade_points = 0.0
+        elif ocr_grade in grade_set and ocr_grade != "S":
+            # Use OCR grade directly if no marks
+            grade = ocr_grade
+            from_grade = {
+                "O": 10.0,
+                "A": 9.0,
+                "B": 8.0,
+                "C": 7.0,
+                "D": 6.0,
+                "P": 5.0,
+                "F": 0.0,
+                "AB": 0.0,
+            }
+            grade_points = from_grade.get(grade, 0.0)
 
-        # Extract numeric internal/external marks from before_marks
-        # After removing the subject name, look for sequences of 2-3 digit numbers
-        # Pattern: ... subject_name [credits] [internal] [external] ... WORD_MARKS
-        # The numbers typically appear as: 1-digit credits, then 2-digit internal, 2-digit external
-        # Find all 1-3 digit numbers in before_marks
-        all_nums_in_before = re.findall(r"\b(\d{1,3})\b", before_marks)
-        all_nums = [int(n) for n in all_nums_in_before]
+        # Use OCR-extracted grade_points if we got them and they differ
+        if grade_points_val > 0 and grade_points == 0:
+            grade_points = grade_points_val
 
-        # Filter for plausible marks (internal: 0-40, external: 0-70 for theory; 0-60 for practical)
-        # Credits are typically 1-4
-        # Strategy: find sequences of [credits, internal, external] or [internal, external]
-        marks_candidates = []
-        for n in all_nums:
-            if 0 <= n <= 100:
-                marks_candidates.append(n)
-
-        # Try to identify internal and external from numeric candidates
-        if len(marks_candidates) >= 3:
-            # Likely: credits, internal, external (or some other combo)
-            # Credits is typically 1-4, internal 0-40, external 0-70
-            # Try to find a pattern where credits(1-6), internal(0-40), external(0-70)
-            for i in range(len(marks_candidates) - 2):
-                c, a, b = (
-                    marks_candidates[i],
-                    marks_candidates[i + 1],
-                    marks_candidates[i + 2],
-                )
-                if 1 <= c <= 6 and 0 <= a <= 40 and 0 <= b <= 70:
-                    # Validate: a + b should be close to total_marks if we have it
-                    if total_marks is not None:
-                        if abs((a + b) - total_marks) <= 2:  # allow small OCR error
-                            internal_marks = a
-                            external_marks = b
-                            break
-                    else:
-                        internal_marks = a
-                        external_marks = b
-                        break
-        elif len(marks_candidates) >= 2:
-            # Might be just internal, external (no credits)
-            for i in range(len(marks_candidates) - 1):
-                a, b = marks_candidates[i], marks_candidates[i + 1]
-                if 0 <= a <= 40 and 0 <= b <= 70:
-                    if total_marks is not None:
-                        if abs((a + b) - total_marks) <= 2:
-                            internal_marks = a
-                            external_marks = b
-                            break
-                    else:
-                        internal_marks = a
-                        external_marks = b
-                        break
-
-        # Extract subject name from before_marks
-        name_part = before_marks
-
-        # Remove pipe chars
-        name_part = re.sub(r"\|", " ", name_part)
-        # Remove "in Words" / "in Figures" that may have been collected
-        name_part = re.sub(
-            r"\s+in\s+(?:words|figures)\s*$", "", name_part, flags=re.IGNORECASE
-        )
-        name_part = re.sub(
-            r"\s+in\s+(?:words|figures)\s+", " ", name_part, flags=re.IGNORECASE
-        )
-        # Remove trailing numbers (credits, internal/external marks)
-        # Pattern: remove sequences of 1-2 digit numbers at the end
-        name_part = re.sub(r"(\s+\d{1,3}){1,5}\s*$", "", name_part)
-        # Remove trailing grade
-        if grade:
-            escaped_grade = re.escape(grade)
-            name_part = re.sub(r"\s+" + escaped_grade + r"\s*$", "", name_part)
-        # Remove trailing single-char grade-like letters
-        name_part = re.sub(r"\s+[OABCDFP]\s*$", "", name_part, flags=re.IGNORECASE)
-        # Remove trailing digits again
-        name_part = re.sub(r"\s+\d{1,3}\s*$", "", name_part)
-        # Clean artifacts
-        name_part = re.sub(r"^[^A-Za-z]+", "", name_part).strip()
-        # Remove trailing non-alpha junk (numbers, symbols, OCR artifacts)
-        name_part = re.sub(r"[\s]+[^A-Za-z\s]{1,3}$", "", name_part).strip()
-        name_part = re.sub(r"[^A-Za-z0-9)\s.&/-]+$", "", name_part).strip()
-        # Remove trailing artifact patterns like "9 o 3 %] &" or "S, \" AN"
-        name_part = re.sub(
-            r"\s+\d+\s+[a-z]\s+\d+\s*[%\]}&;|]+.*$", "", name_part, flags=re.IGNORECASE
-        ).strip()
-        name_part = re.sub(
-            r"\s+[A-Z],?\s*[\"\'\\]+\s*[A-Z]*\s*$", "", name_part
-        ).strip()
-        # Remove stray trailing chars
-        name_part = re.sub(r"\s+[.:;,]+\s*$", "", name_part).strip()
-        # Remove trailing OCR noise like "HX", "VEN", "b4" at the end
-        name_part = re.sub(r"\s+[A-Z]{1,3}\s*$", "", name_part).strip()
-        name_part = re.sub(r"\s+[a-z]\d\s*$", "", name_part).strip()
-        # Remove footer/header text that leaked into name
-        name_part = re.sub(
-            r"\s*(?:TotalMarks|Total\s*Marks|in\s+Words|in\s+Figures|Semester\s+Grade).*$",
-            "",
-            name_part,
-            flags=re.IGNORECASE,
-        ).strip()
-        # Remove OCR junk between split subject names (e.g., "3 18 49 VEN b4")
-        # Pattern: sequences of short numeric/alpha tokens that aren't real words
-        name_part = re.sub(
-            r"\s+\d{1,2}\s+\d{1,2}\s+\d{1,2}\s+[A-Z]{1,4}\s+[a-z0-9]{1,3}\s+",
-            " ",
-            name_part,
-        ).strip()
-        # Remove trailing PR, N, and other single-char OCR artifacts
-        name_part = re.sub(r"\s+[A-Z]{1,2}\s+[a-z]\s+\w+\s*$", "", name_part).strip()
-        name_part = re.sub(r"\s+[A-Z]{1,2}\s*$", "", name_part).strip()
-
-        if name_part:
-            subject_name = name_part
-        else:
-            subject_name = subject_code
-
-        # Try numeric marks if word marks not found
-        if total_marks is None:
-            nums = re.findall(r"\b(\d{2,3})\b", combined)
-            bigger_nums = [int(n) for n in nums if 20 <= int(n) <= 100]
-            if len(bigger_nums) >= 2:
-                total_marks = bigger_nums[-1]
-            elif len(bigger_nums) == 1:
-                total_marks = bigger_nums[0]
-
-        # If we have internal + external but no total, compute it
-        if total_marks is None and internal_marks > 0 and external_marks > 0:
-            total_marks = internal_marks + external_marks
+        # Override grade with OCR grade if OCR grade differs
+        # (university may use different cutoffs)
+        # But only trust it if OCR grade_points are consistent with OCR grade
+        # (prevents OCR misreads like 'D' → 'a' being treated as grade 'A')
+        if ocr_grade and ocr_grade != "S" and ocr_grade != grade and total_marks > 0:
+            from_grade = {
+                "O": 10.0,
+                "A": 9.0,
+                "B": 8.0,
+                "C": 7.0,
+                "D": 6.0,
+                "P": 5.0,
+                "F": 0.0,
+                "AB": 0.0,
+            }
+            expected_gp = from_grade.get(ocr_grade, -1)
+            # Only override if: (a) grade_points from OCR match the OCR grade, OR
+            # (b) we have no grade_points from OCR to cross-check
+            if grade_points_val <= 0 or abs(expected_gp - grade_points_val) < 0.5:
+                grade = ocr_grade
+                grade_points = expected_gp if expected_gp >= 0 else grade_points
 
         # Determine pass/fail
         status = "PASS"
         if grade.upper() in ("F", "AB"):
             status = "FAIL"
-        elif total_marks is not None and total_marks < 40:
+        elif total_marks > 0 and total_marks < 40:
             status = "FAIL"
 
-        # Always include the subject — even with total_marks=0
-        # Student can manually fill in marks in the preview
         subjects.append(
             {
                 "subject_code": subject_code,
                 "subject_name": subject_name,
+                "credits": credits,
                 "internal_marks": internal_marks,
                 "external_marks": external_marks,
-                "total_marks": total_marks if total_marks is not None else 0,
+                "total_marks": total_marks,
                 "grade_points": grade_points,
                 "grade": grade,
                 "status": status,
             }
         )
 
-    # Deduplicate: if same subject_code appears multiple times (across pages),
-    # keep the entry with the most data (highest total_marks > 0, or has grade)
+    # Deduplicate: keep entry with most data for each subject_code
     seen = {}
     for s in subjects:
         code = s["subject_code"]
@@ -763,7 +835,6 @@ def parse_ocr_subjects(text):
         else:
             existing = seen[code]
 
-            # Score: prefer entry with marks, then grade, then better name
             def score(entry):
                 sc = 0
                 if entry["total_marks"] > 0:
@@ -777,7 +848,6 @@ def parse_ocr_subjects(text):
                 return sc
 
             if score(s) > score(existing):
-                # Merge: keep better entry but fill in missing fields from other
                 if not s["subject_name"] or s["subject_name"] == s["subject_code"]:
                     s["subject_name"] = existing["subject_name"]
                 if not s["grade"] and existing["grade"]:
@@ -785,7 +855,6 @@ def parse_ocr_subjects(text):
                     s["grade_points"] = existing["grade_points"]
                 seen[code] = s
             else:
-                # Keep existing but fill in missing fields from new
                 if (
                     not existing["subject_name"]
                     or existing["subject_name"] == existing["subject_code"]
@@ -798,20 +867,90 @@ def parse_ocr_subjects(text):
     return list(seen.values())
 
 
+def paddle_ocr_image(img_input):
+    """
+    Run PaddleOCR on an image and return extracted text as a single string.
+    img_input can be a file path (str) or a numpy array.
+
+    PaddleOCR returns each detected text region separately with bounding boxes.
+    We reconstruct logical lines by grouping text regions that share similar
+    Y-coordinates (same row in the document), then sorting left-to-right
+    within each row. This preserves table structure much better than naive
+    line-by-line concatenation.
+    """
+    ocr = get_paddle_ocr()
+    result = ocr.ocr(img_input, cls=True)
+
+    if not result or not result[0]:
+        return ""
+
+    # Collect all text regions with their bounding box info
+    # Each line_info is: [bounding_box_4_points, (text, confidence)]
+    # bounding_box is [[x1,y1],[x2,y2],[x3,y3],[x4,y4]] (clockwise from top-left)
+    regions = []
+    for line_info in result[0]:
+        box = line_info[0]
+        text = line_info[1][0]
+        confidence = line_info[1][1]
+        # Use the average Y of top-left and top-right as the vertical position
+        y_center = (box[0][1] + box[3][1]) / 2.0
+        x_left = box[0][0]
+        height = abs(box[3][1] - box[0][1])
+        regions.append(
+            {
+                "text": text,
+                "confidence": confidence,
+                "y_center": y_center,
+                "x_left": x_left,
+                "height": max(height, 10),  # minimum height to avoid division by zero
+            }
+        )
+
+    if not regions:
+        return ""
+
+    # Sort by vertical position first
+    regions.sort(key=lambda r: r["y_center"])
+
+    # Group into rows: regions within half the average text height are on the same row
+    avg_height = sum(r["height"] for r in regions) / len(regions)
+    row_threshold = avg_height * 0.5  # if Y centers are within this, same row
+
+    rows = []
+    current_row = [regions[0]]
+
+    for r in regions[1:]:
+        if abs(r["y_center"] - current_row[-1]["y_center"]) <= row_threshold:
+            current_row.append(r)
+        else:
+            rows.append(current_row)
+            current_row = [r]
+    rows.append(current_row)
+
+    # Sort each row left-to-right by X position, then join with spaces
+    lines = []
+    for row in rows:
+        row.sort(key=lambda r: r["x_left"])
+        line_text = " ".join(r["text"] for r in row)
+        lines.append(line_text)
+
+    return "\n".join(lines)
+
+
 def ocr_pdf_to_text(filepath):
-    """Convert a scanned PDF to text using pdftoppm + Tesseract OCR."""
+    """Convert a scanned PDF to text using pdftoppm + PaddleOCR."""
     import subprocess
 
     pages_text = []
     tmp_prefix = os.path.join(tempfile.gettempdir(), f"memo_ocr_{int(time.time())}")
 
     try:
-        # Convert PDF pages to images
+        # Convert PDF pages to images at 300 DPI
         result = subprocess.run(
             ["pdftoppm", "-png", "-r", "300", filepath, tmp_prefix],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=240,
         )
         if result.returncode != 0:
             raise ValueError(f"PDF to image conversion failed: {result.stderr}")
@@ -830,14 +969,7 @@ def ocr_pdf_to_text(filepath):
         for pf in page_files:
             img_path = os.path.join(tmp_dir, pf)
             try:
-                img = Image.open(img_path).convert("L")
-                # Enhance contrast for better OCR
-                from PIL import ImageEnhance
-
-                enhanced = ImageEnhance.Contrast(img).enhance(2.0)
-                text = pytesseract.image_to_string(
-                    enhanced, lang="eng", config="--psm 3 --oem 3"
-                )
+                text = paddle_ocr_image(img_path)
                 pages_text.append(text)
             finally:
                 try:
@@ -851,11 +983,15 @@ def ocr_pdf_to_text(filepath):
     return pages_text
 
 
-def parse_pdf_memo(filepath):
+def parse_pdf_memo(filepath, pre_extracted_pages=None):
     """
     Parse a marks memo PDF.
     First tries pdfplumber (for text-based PDFs).
     Falls back to OCR (for scanned/image-based PDFs).
+
+    If pre_extracted_pages is provided (list of page text strings),
+    skip OCR and use the pre-extracted text directly. This avoids
+    running PaddleOCR twice.
     """
     all_semesters = []
 
@@ -896,8 +1032,11 @@ def parse_pdf_memo(filepath):
     except Exception:
         pass
 
-    # Scanned PDF - use OCR
-    pages_text = ocr_pdf_to_text(filepath)
+    # Scanned PDF - use OCR (or pre-extracted text if available)
+    if pre_extracted_pages:
+        pages_text = pre_extracted_pages
+    else:
+        pages_text = ocr_pdf_to_text(filepath)
 
     for page_num, text in enumerate(pages_text):
         if not text.strip():
@@ -925,17 +1064,11 @@ def parse_pdf_memo(filepath):
 
 def parse_image_memo(filepath):
     """
-    Parse a marks memo image using Tesseract OCR.
+    Parse a marks memo image using PaddleOCR.
     Returns a list of semester results (usually just one per image).
     """
     try:
-        img = Image.open(filepath).convert("L")
-        from PIL import ImageEnhance
-
-        enhanced = ImageEnhance.Contrast(img).enhance(2.0)
-        text = pytesseract.image_to_string(
-            enhanced, lang="eng", config="--psm 3 --oem 3"
-        )
+        text = paddle_ocr_image(filepath)
 
         if not text.strip():
             raise ValueError("No text could be extracted from the image")
@@ -962,9 +1095,9 @@ def parse_image_memo(filepath):
             }
         ]
 
-    except pytesseract.TesseractNotFoundError:
-        raise ValueError("OCR engine not available. Please upload a PDF instead.")
     except Exception as e:
+        if "No text could be extracted" in str(e) or "Could not extract" in str(e):
+            raise
         raise ValueError(f"Failed to parse image: {str(e)}")
 
 
@@ -1026,6 +1159,7 @@ def init_db():
             semester INT NOT NULL,
             subject_code VARCHAR(50) NOT NULL,
             subject_name VARCHAR(255) NOT NULL,
+            credits INT DEFAULT 3,
             internal_marks INT DEFAULT 0,
             external_marks INT DEFAULT 0,
             total_marks INT DEFAULT 0,
@@ -1033,6 +1167,8 @@ def init_db():
             grade_points DECIMAL(4,2) DEFAULT 0,
             grade VARCHAR(5) DEFAULT '',
             status ENUM('PASS', 'FAIL', 'AB', 'MP') DEFAULT 'PASS',
+            attempts INT DEFAULT 1,
+            display_order INT DEFAULT 0,
             academic_year VARCHAR(20) NOT NULL DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -1040,6 +1176,26 @@ def init_db():
             UNIQUE KEY unique_result (roll_number, year, semester, subject_code)
         )
     """)
+
+    # Add credits and attempts columns if not exists (migration)
+    try:
+        cursor.execute(
+            "ALTER TABLE results ADD COLUMN credits INT DEFAULT 3 AFTER subject_name"
+        )
+    except Exception:
+        pass
+    try:
+        cursor.execute(
+            "ALTER TABLE results ADD COLUMN attempts INT DEFAULT 1 AFTER status"
+        )
+    except Exception:
+        pass
+    try:
+        cursor.execute(
+            "ALTER TABLE results ADD COLUMN display_order INT DEFAULT 0 AFTER attempts"
+        )
+    except Exception:
+        pass
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS semester_summary (
@@ -1350,7 +1506,7 @@ def compute_cgpa_and_pending(roll_number, up_to_year=None, up_to_semester=None):
     elif up_to_year:
         query2 += " AND year <= %s"
         params2.append(int(up_to_year))
-    query2 += " ORDER BY year, semester, subject_code"
+    query2 += " ORDER BY year, semester, display_order, id"
 
     cursor.execute(query2, params2)
     pending_subjects = serialize_rows(cursor.fetchall())
@@ -1425,7 +1581,7 @@ def get_student_results():
         elif year:
             query += " AND year <= %s"
             params.append(int(year))
-        query += " ORDER BY year, semester, subject_code"
+        query += " ORDER BY year, semester, display_order, id"
 
         cursor.execute(query, params)
         results = serialize_rows(cursor.fetchall())
@@ -1479,6 +1635,8 @@ def upload_memo():
     if claims.get("role") != "student":
         return jsonify({"error": "Please login as a student to upload memos"}), 403
 
+    logger.info(f"Upload request from student {get_jwt_identity()}")
+
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -1502,9 +1660,80 @@ def upload_memo():
 
         # Parse based on file type
         if ext == "pdf":
-            semesters = parse_pdf_memo(tmp_path)
+            # Check if PDF has embedded text or needs OCR
+            raw_ocr_pages = []
+            is_text_pdf = False
+            try:
+                with pdfplumber.open(tmp_path) as pdf:
+                    for page in pdf.pages:
+                        t = page.extract_text() or ""
+                        if len(t.strip()) > 100:
+                            is_text_pdf = True
+                            break
+                if is_text_pdf:
+                    with pdfplumber.open(tmp_path) as pdf:
+                        for page in pdf.pages:
+                            raw_ocr_pages.append(page.extract_text() or "")
+                else:
+                    # Scanned PDF — run OCR once and reuse
+                    logger.info("PDF has no embedded text, running PaddleOCR...")
+                    raw_ocr_pages = ocr_pdf_to_text(tmp_path)
+                    logger.info(f"PaddleOCR extracted {len(raw_ocr_pages)} pages")
+            except Exception as e:
+                logger.error(f"Error extracting PDF text: {e}")
+
+            # Save raw text for debugging
+            try:
+                debug_path = os.path.join("/tmp", f"ocr_debug_{int(time.time())}.txt")
+                with open(debug_path, "w") as df:
+                    for i, page_text in enumerate(raw_ocr_pages):
+                        df.write(f"=== PAGE {i + 1} ===\n")
+                        df.write(page_text)
+                        df.write("\n\n")
+            except Exception:
+                pass
+
+            # Parse subjects from the already-extracted text (no double OCR)
+            semesters = parse_pdf_memo(
+                tmp_path, pre_extracted_pages=raw_ocr_pages if not is_text_pdf else None
+            )
         else:
-            semesters = parse_image_memo(tmp_path)
+            # Image file — run OCR once and reuse
+            logger.info("Processing image with PaddleOCR...")
+            raw_text = paddle_ocr_image(tmp_path)
+            logger.info(f"PaddleOCR extracted {len(raw_text)} chars from image")
+
+            # Save raw text for debugging
+            try:
+                debug_path = os.path.join("/tmp", f"ocr_debug_{int(time.time())}.txt")
+                with open(debug_path, "w") as df:
+                    df.write("=== IMAGE OCR ===\n")
+                    df.write(raw_text)
+                    df.write("\n")
+            except Exception:
+                pass
+
+            # Parse subjects from OCR text (no double OCR)
+            if not raw_text.strip():
+                semesters = []
+            else:
+                year, semester = parse_year_semester_from_text(raw_text)
+                student_info = parse_student_info_from_text(raw_text)
+                sgpa = parse_sgpa_from_text(raw_text)
+                subjects = parse_ocr_subjects(raw_text)
+                if subjects:
+                    semesters = [
+                        {
+                            "page": 1,
+                            "year": year,
+                            "semester": semester,
+                            "student_info": student_info,
+                            "sgpa": sgpa,
+                            "subjects": subjects,
+                        }
+                    ]
+                else:
+                    semesters = []
 
         # Clean up temp file
         try:
@@ -1530,8 +1759,10 @@ def upload_memo():
         ), 200
 
     except ValueError as e:
+        logger.error(f"Upload ValueError: {e}")
         return jsonify({"error": str(e)}), 422
     except Exception as e:
+        logger.error(f"Upload Exception: {e}", exc_info=True)
         return jsonify({"error": f"Failed to process file: {str(e)}"}), 500
 
 
@@ -1586,9 +1817,12 @@ def confirm_memo():
             if not year or not semester:
                 continue
 
-            for subj in subjects:
+            for subj_idx, subj in enumerate(subjects):
                 subject_code = subj.get("subject_code", "").strip()
                 subject_name = subj.get("subject_name", "").strip()
+                subj_credits = int(subj.get("credits", 3))
+                if subj_credits < 1 or subj_credits > 6:
+                    subj_credits = 3
                 internal = int(subj.get("internal_marks", 0))
                 external = int(subj.get("external_marks", 0))
                 total = int(subj.get("total_marks", internal + external))
@@ -1599,66 +1833,147 @@ def confirm_memo():
                     continue
 
                 # Calculate grade and grade_points from total marks
-                grade, grade_points = calculate_grade_from_marks(total, parsed_grade)
+                # S-grade (Satisfactory) subjects: preserve as-is
+                if parsed_grade == "S":
+                    grade = "S"
+                    grade_points = 0.0
+                else:
+                    grade, grade_points = calculate_grade_from_marks(
+                        total, parsed_grade
+                    )
 
                 if status not in ("PASS", "FAIL", "AB", "MP"):
                     status = "FAIL" if grade.upper() in ("F", "AB") else "PASS"
 
+                # Check if this subject already exists (supplementary scenario)
                 cursor.execute(
-                    """INSERT INTO results
-                       (roll_number, year, semester, subject_code, subject_name,
-                        internal_marks, external_marks, total_marks, max_marks,
-                        grade_points, grade, status, academic_year)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                       ON DUPLICATE KEY UPDATE
-                        subject_name=VALUES(subject_name),
-                        internal_marks=VALUES(internal_marks),
-                        external_marks=VALUES(external_marks),
-                        total_marks=VALUES(total_marks),
-                        grade_points=VALUES(grade_points),
-                        grade=VALUES(grade),
-                        status=VALUES(status),
-                        academic_year=VALUES(academic_year)
-                    """,
-                    (
-                        identity,
-                        year,
-                        semester,
-                        subject_code,
-                        subject_name,
-                        internal,
-                        external,
-                        total,
-                        100,
-                        grade_points,
-                        grade,
-                        status,
-                        academic_year,
-                    ),
+                    """SELECT id, status, attempts, credits FROM results
+                       WHERE roll_number = %s AND year = %s AND semester = %s AND subject_code = %s""",
+                    (identity, year, semester, subject_code),
                 )
-                results_added += 1
+                existing = cursor.fetchone()
+
+                if existing:
+                    (
+                        existing_id,
+                        existing_status,
+                        existing_attempts,
+                        existing_credits,
+                    ) = existing
+                    if existing_status in ("FAIL", "AB"):
+                        # Supplementary: update failed subject with new marks, increment attempts
+                        new_attempts = (existing_attempts or 1) + 1
+                        # Keep existing credits if new upload didn't detect them (default 3)
+                        final_credits = (
+                            subj_credits
+                            if subj_credits != 3
+                            else (existing_credits or 3)
+                        )
+                        cursor.execute(
+                            """UPDATE results SET
+                                subject_name=COALESCE(NULLIF(%s, ''), subject_name),
+                                credits=%s,
+                                internal_marks=%s, external_marks=%s, total_marks=%s,
+                                grade_points=%s, grade=%s, status=%s,
+                                attempts=%s, academic_year=%s
+                               WHERE id=%s""",
+                            (
+                                subject_name,
+                                final_credits,
+                                internal,
+                                external,
+                                total,
+                                grade_points,
+                                grade,
+                                status,
+                                new_attempts,
+                                academic_year,
+                                existing_id,
+                            ),
+                        )
+                        results_added += 1
+                    else:
+                        # Already passed — only update credits if they were default
+                        if existing_credits is None or existing_credits == 0:
+                            cursor.execute(
+                                "UPDATE results SET credits=%s WHERE id=%s",
+                                (subj_credits, existing_id),
+                            )
+                else:
+                    # New subject — insert
+                    cursor.execute(
+                        """INSERT INTO results
+                           (roll_number, year, semester, subject_code, subject_name,
+                            credits, internal_marks, external_marks, total_marks, max_marks,
+                            grade_points, grade, status, attempts, display_order, academic_year)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            identity,
+                            year,
+                            semester,
+                            subject_code,
+                            subject_name,
+                            subj_credits,
+                            internal,
+                            external,
+                            total,
+                            100,
+                            grade_points,
+                            grade,
+                            status,
+                            1,
+                            subj_idx,
+                            academic_year,
+                        ),
+                    )
+                    results_added += 1
 
             # Upsert semester summary
-            # Calculate SGPA from grade points (average of all subject grade points)
+            # Use OCR-extracted SGPA from memo when available (most accurate).
+            # Fall back to credit-weighted calculation if memo SGPA not available.
             if subjects:
-                computed_grade_points = []
-                for subj in subjects:
-                    total = int(subj.get("total_marks", 0))
-                    pg = subj.get("grade", "")
-                    g, gp = calculate_grade_from_marks(total, pg)
-                    computed_grade_points.append(gp)
-
-                if computed_grade_points:
-                    sgpa = round(
-                        sum(computed_grade_points) / len(computed_grade_points), 2
-                    )
-
-                total_subj = len(subjects)
-                passed = len(
-                    [s for s in subjects if s.get("status", "PASS").upper() == "PASS"]
+                # Fetch all current results for this roll/year/semester from DB
+                cursor_dict = conn.cursor(pymysql.cursors.DictCursor)
+                cursor_dict.execute(
+                    "SELECT credits, grade_points, grade, total_marks, status FROM results WHERE roll_number = %s AND year = %s AND semester = %s",
+                    (identity, year, semester),
                 )
-                failed = total_subj - passed
-                total_marks_sum = sum(int(s.get("total_marks", 0)) for s in subjects)
+                all_sem_results = cursor_dict.fetchall()
+                cursor_dict.close()
+
+                weighted_sum = 0
+                total_credits = 0
+                total_subj = len(all_sem_results)
+                passed = 0
+                failed = 0
+                total_marks_sum = 0
+                for r in all_sem_results:
+                    grade_val = (r.get("grade", "") or "").strip().upper()
+                    total_marks_sum += int(r.get("total_marks", 0) or 0)
+                    if r.get("status", "PASS") == "PASS":
+                        passed += 1
+                    else:
+                        failed += 1
+                    # S-grade (Satisfactory) subjects are NOT included in SGPA
+                    if grade_val == "S":
+                        continue
+                    cr = int(r.get("credits", 1) or 1)
+                    if cr < 1 or cr > 6:
+                        cr = 1
+                    gp = float(r.get("grade_points", 0) or 0)
+                    weighted_sum += cr * gp
+                    total_credits += cr
+
+                calculated_sgpa = (
+                    round(weighted_sum / total_credits, 2) if total_credits > 0 else 0
+                )
+
+                # Prefer OCR-extracted SGPA from memo; fall back to calculated
+                if sgpa and sgpa > 0:
+                    final_sgpa = sgpa
+                else:
+                    final_sgpa = calculated_sgpa
 
                 cursor.execute(
                     """INSERT INTO semester_summary
@@ -1677,7 +1992,7 @@ def confirm_memo():
                         identity,
                         year,
                         semester,
-                        sgpa,
+                        final_sgpa,
                         total_marks_sum,
                         total_subj,
                         passed,
@@ -1963,7 +2278,7 @@ def get_student_results_admin(roll_number):
         elif year:
             query += " AND year <= %s"
             params.append(int(year))
-        query += " ORDER BY year, semester, subject_code"
+        query += " ORDER BY year, semester, display_order, id"
 
         cursor.execute(query, params)
         results = serialize_rows(cursor.fetchall())
@@ -2040,10 +2355,20 @@ def add_result():
         total = int(data.get("total_marks", internal + external))
         max_marks = int(data.get("max_marks", 100))
         academic_year = data.get("academic_year", "")
+        credits = int(data.get("credits", 3))
+        if credits < 1 or credits > 6:
+            credits = 3
+        attempts = int(data.get("attempts", 1))
+        if attempts < 1:
+            attempts = 1
 
         # Calculate grade and grade_points from total marks
         parsed_grade = data.get("grade", "")
-        grade, grade_points = calculate_grade_from_marks(total, parsed_grade)
+        if parsed_grade == "S":
+            grade = "S"
+            grade_points = 0.0
+        else:
+            grade, grade_points = calculate_grade_from_marks(total, parsed_grade)
 
         # Determine pass/fail status
         status = data.get("status", "")
@@ -2053,11 +2378,12 @@ def add_result():
         cursor.execute(
             """INSERT INTO results
                (roll_number, year, semester, subject_code, subject_name,
-                internal_marks, external_marks, total_marks, max_marks,
-                grade_points, grade, status, academic_year)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                credits, internal_marks, external_marks, total_marks, max_marks,
+                grade_points, grade, status, attempts, academic_year)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                ON DUPLICATE KEY UPDATE
                 subject_name=VALUES(subject_name),
+                credits=VALUES(credits),
                 internal_marks=VALUES(internal_marks),
                 external_marks=VALUES(external_marks),
                 total_marks=VALUES(total_marks),
@@ -2065,6 +2391,7 @@ def add_result():
                 grade_points=VALUES(grade_points),
                 grade=VALUES(grade),
                 status=VALUES(status),
+                attempts=VALUES(attempts),
                 academic_year=VALUES(academic_year)
             """,
             (
@@ -2073,6 +2400,7 @@ def add_result():
                 int(data["semester"]),
                 data["subject_code"],
                 data["subject_name"],
+                credits,
                 internal,
                 external,
                 total,
@@ -2080,6 +2408,7 @@ def add_result():
                 grade_points,
                 grade,
                 status,
+                attempts,
                 academic_year,
             ),
         )
@@ -2121,6 +2450,7 @@ def update_result(result_id):
         updatable = [
             "subject_code",
             "subject_name",
+            "credits",
             "internal_marks",
             "external_marks",
             "total_marks",
@@ -2128,6 +2458,7 @@ def update_result(result_id):
             "grade_points",
             "grade",
             "status",
+            "attempts",
             "academic_year",
             "year",
             "semester",
@@ -2137,7 +2468,11 @@ def update_result(result_id):
         if "total_marks" in data:
             total = int(data["total_marks"])
             parsed_grade = data.get("grade", result.get("grade", ""))
-            grade, grade_points = calculate_grade_from_marks(total, parsed_grade)
+            if parsed_grade == "S":
+                grade = "S"
+                grade_points = 0.0
+            else:
+                grade, grade_points = calculate_grade_from_marks(total, parsed_grade)
             data["grade"] = grade
             data["grade_points"] = grade_points
             # Also update status if not explicitly provided
@@ -2267,7 +2602,7 @@ def get_results_by_roll(roll_number):
         conn = get_db_connection(use_dict=True)
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT * FROM results WHERE roll_number = %s ORDER BY year, semester, subject_code",
+            "SELECT * FROM results WHERE roll_number = %s ORDER BY year, semester, display_order, id",
             (roll_number,),
         )
         results = serialize_rows(cursor.fetchall())
@@ -2562,6 +2897,9 @@ def student_add_subject():
     subject_name = data.get("subject_name", "").strip()
     year = data.get("year")
     semester = data.get("semester")
+    credits = int(data.get("credits", 3))
+    if credits < 1 or credits > 6:
+        credits = 3
 
     if not subject_code or not subject_name or not year or not semester:
         return jsonify(
@@ -2590,13 +2928,21 @@ def student_add_subject():
                 {"error": "This subject already exists for this semester"}
             ), 409
 
+        # Get the max display_order for this semester so new subject goes to the end
+        cursor.execute(
+            "SELECT COALESCE(MAX(display_order), -1) FROM results WHERE roll_number = %s AND year = %s AND semester = %s",
+            (identity, year, semester),
+        )
+        max_order = cursor.fetchone()[0]
+        next_order = max_order + 1
+
         cursor.execute(
             """INSERT INTO results
                (roll_number, year, semester, subject_code, subject_name,
-                internal_marks, external_marks, total_marks, max_marks,
-                grade_points, grade, status, academic_year)
-               VALUES (%s, %s, %s, %s, %s, 0, 0, 0, 100, 0, '', 'PASS', '')""",
-            (identity, year, semester, subject_code, subject_name),
+                credits, internal_marks, external_marks, total_marks, max_marks,
+                grade_points, grade, status, attempts, display_order, academic_year)
+               VALUES (%s, %s, %s, %s, %s, %s, 0, 0, 0, 100, 0, '', 'PASS', 1, %s, '')""",
+            (identity, year, semester, subject_code, subject_name, credits, next_order),
         )
         conn.commit()
         result_id = cursor.lastrowid
@@ -2604,6 +2950,90 @@ def student_add_subject():
         conn.close()
 
         return jsonify({"message": "Subject added successfully", "id": result_id}), 201
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================================
+# REORDER SUBJECTS (move up / move down)
+# ============================================================
+
+
+@app.route("/api/student/reorder-subjects", methods=["PUT"])
+@jwt_required()
+def reorder_subjects():
+    """Swap display_order of two subjects so students can move rows up/down."""
+    claims = get_jwt()
+    if claims.get("role") != "student":
+        return jsonify({"error": "Access denied"}), 403
+
+    identity = get_jwt_identity()
+    data = request.get_json() or {}
+
+    result_id = data.get("result_id")
+    direction = data.get("direction")  # "up" or "down"
+
+    if not result_id or direction not in ("up", "down"):
+        return jsonify({"error": "result_id and direction (up/down) are required"}), 400
+
+    try:
+        conn = get_db_connection(use_dict=True)
+        cursor = conn.cursor()
+
+        # Get the current subject
+        cursor.execute(
+            "SELECT id, year, semester, display_order FROM results WHERE id = %s AND roll_number = %s",
+            (result_id, identity),
+        )
+        current = cursor.fetchone()
+        if not current:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "Result not found"}), 404
+
+        year = current["year"]
+        semester = current["semester"]
+        current_order = current["display_order"]
+
+        # Find the neighbor to swap with
+        if direction == "up":
+            cursor.execute(
+                """SELECT id, display_order FROM results
+                   WHERE roll_number = %s AND year = %s AND semester = %s AND display_order < %s
+                   ORDER BY display_order DESC LIMIT 1""",
+                (identity, year, semester, current_order),
+            )
+        else:
+            cursor.execute(
+                """SELECT id, display_order FROM results
+                   WHERE roll_number = %s AND year = %s AND semester = %s AND display_order > %s
+                   ORDER BY display_order ASC LIMIT 1""",
+                (identity, year, semester, current_order),
+            )
+
+        neighbor = cursor.fetchone()
+        if not neighbor:
+            cursor.close()
+            conn.close()
+            return jsonify({"message": "Already at the boundary"}), 200
+
+        # Swap display_order values
+        cursor_raw = conn.cursor()
+        cursor_raw.execute(
+            "UPDATE results SET display_order = %s WHERE id = %s",
+            (neighbor["display_order"], current["id"]),
+        )
+        cursor_raw.execute(
+            "UPDATE results SET display_order = %s WHERE id = %s",
+            (current_order, neighbor["id"]),
+        )
+        conn.commit()
+        cursor.close()
+        cursor_raw.close()
+        conn.close()
+
+        return jsonify({"message": "Reordered successfully"}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

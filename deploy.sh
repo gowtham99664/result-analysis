@@ -19,15 +19,15 @@ BACKUP_DIR="${PROJECT_DIR}/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="${BACKUP_DIR}/db_backup_${TIMESTAMP}.sql"
 
-DB_CONTAINER="spmvv-db"
-BACKEND_CONTAINER="spmvv-backend"
-FRONTEND_CONTAINER="spmvv-frontend"
-NETWORK_NAME="spmvv-network"
-DB_VOLUME="spmvv-mysql-data"
+DB_CONTAINER="soet-db"
+BACKEND_CONTAINER="soet-backend"
+FRONTEND_CONTAINER="soet-frontend"
+NETWORK_NAME="soet-network"
+DB_VOLUME="soet-mysql-data"
 
 DB_IMAGE="mariadb:10.11"
-BACKEND_IMAGE="spmvv-backend:latest"
-FRONTEND_IMAGE="spmvv-frontend:latest"
+BACKEND_IMAGE="soet-backend:latest"
+FRONTEND_IMAGE="soet-frontend:latest"
 
 DB_PASSWORD="spmvv_root_2024"
 DB_NAME="result_analysis"
@@ -225,6 +225,6 @@ echo -e "${GREEN}  Application URL: http://$(hostname -I 2>/dev/null | awk '{pri
 echo -e "${GREEN}  Admin Login:     username: admin | password: admin123${NC}"
 echo ""
 echo -e "${BLUE}  Container Status:${NC}"
-docker ps --format "  {{.Names}}\t{{.Status}}\t{{.Ports}}" --filter "name=spmvv" 2>/dev/null
+docker ps --format "  {{.Names}}\t{{.Status}}\t{{.Ports}}" --filter "name=soet" 2>/dev/null
 echo ""
 echo -e "${BLUE}================================================================${NC}"

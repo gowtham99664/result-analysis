@@ -3,6 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import axios from 'axios';
 import Navbar from '../components/Navbar';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell,
+} from 'recharts';
 
 const API_URL = window.location.origin + '/api';
 
@@ -806,6 +810,56 @@ function AdminDashboard() {
               </div>
             )}
 
+            {/* Charts Section */}
+            {overviewStats && (
+              <div className="charts-section" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                {/* Branch Distribution Pie Chart */}
+                <div className="table-container" style={{ padding: '1.5rem' }}>
+                  <h3 style={{ color: 'var(--primary-color)', marginBottom: '1rem', fontSize: '1rem' }}>Students by Branch</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={['CSE', 'ECE', 'EEE', 'MECH'].map(b => ({
+                          name: b, value: branchCounts[b] || 0,
+                        })).filter(d => d.value > 0)}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={80}
+                        label={({ name, value }) => `${name}(${value})`}
+                        labelLine={true}
+                        dataKey="value"
+                      >
+                        {['#1a237e', '#4caf50', '#ff9800', '#f44336'].map((color, i) => (
+                          <Cell key={i} fill={color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Uploads per Branch Bar Chart */}
+                {overviewStats.batch_upload_stats && (
+                  <div className="table-container" style={{ padding: '1.5rem' }}>
+                    <h3 style={{ color: 'var(--primary-color)', marginBottom: '1rem', fontSize: '1rem' }}>Students per Batch</h3>
+                    <ResponsiveContainer width="100%" height={250}>
+                      <BarChart data={Object.keys(overviewStats.batch_upload_stats).sort().map(bk => ({
+                        name: overviewStats.batch_upload_stats[bk].batch_label || bk,
+                        Students: overviewStats.batch_upload_stats[bk].total_students || 0,
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={12} />
+                        <YAxis fontSize={12} />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="Students" fill="#1a237e" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Quick Search */}
             <div className="search-section">
               <form onSubmit={handleSearch} className="search-form">
@@ -987,7 +1041,7 @@ function AdminDashboard() {
                   </div>
                 </div>
 
-                {/* Semester Summaries */}
+                {/* Semester SGPA Cards */}
                 {viewingStudentSummaries.length > 0 && (
                   <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
                     {viewingStudentSummaries.map((sem) => (
@@ -1004,6 +1058,28 @@ function AdminDashboard() {
                   </div>
                 )}
 
+                {/* Student SGPA Trend Chart */}
+                {viewingStudentSummaries.length > 1 && (
+                  <div className="table-container" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+                    <h3 style={{ color: 'var(--primary-color)', marginBottom: '1rem', fontSize: '1rem' }}>SGPA Trend — {viewingStudent.full_name}</h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={viewingStudentSummaries.map(ss => ({
+                        name: `Y${ss.year}-S${ss.semester}`,
+                        SGPA: parseFloat(ss.sgpa) || 0,
+                        Passed: ss.passed_subjects || 0,
+                        Failed: ss.failed_subjects || 0,
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={12} />
+                        <YAxis domain={[0, 10]} fontSize={12} />
+                        <Tooltip />
+                        <Legend />
+                        <Bar dataKey="SGPA" fill="#1a237e" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+
                 {/* Pending Subjects */}
                 {viewingStudentPending.length > 0 && (
                   <div className="table-container" style={{ marginBottom: '1.5rem', borderLeft: '4px solid #f44336' }}>
@@ -1012,7 +1088,7 @@ function AdminDashboard() {
                     </div>
                     <table>
                       <thead>
-                        <tr><th>Code</th><th>Subject</th><th>Year</th><th>Sem</th><th>Total</th><th>Grade</th></tr>
+                        <tr><th>Code</th><th>Subject</th><th>Year</th><th>Sem</th><th>Credits</th><th>Total</th><th>Grade</th><th>Attempts</th></tr>
                       </thead>
                       <tbody>
                         {viewingStudentPending.map((r) => (
@@ -1021,8 +1097,10 @@ function AdminDashboard() {
                             <td>{r.subject_name}</td>
                             <td>{YEAR_LABELS[r.year]}</td>
                             <td>{SEM_LABELS[r.semester]}</td>
+                            <td>{r.credits || 3}</td>
                             <td>{r.total_marks}</td>
                             <td><span className="grade-badge grade-F">{r.grade || 'F'}</span></td>
+                            <td>{r.attempts || 1}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1048,7 +1126,7 @@ function AdminDashboard() {
                           <table>
                             <thead>
                               <tr>
-                                <th>Code</th><th>Subject</th><th>Total Marks</th><th>Grade Pts</th><th>Grade</th><th>Status</th><th>Actions</th>
+                                <th>Code</th><th>Subject</th><th>Credits</th><th>Total Marks</th><th>Grade Pts</th><th>Grade</th><th>Status</th><th>Attempts</th><th>Actions</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1057,6 +1135,7 @@ function AdminDashboard() {
                                   <tr key={result.id} className="editing-row">
                                     <td><input type="text" className="form-control table-input" value={studentEditForm.subject_code} onChange={(e) => setStudentEditForm({...studentEditForm, subject_code: e.target.value})} /></td>
                                     <td><input type="text" className="form-control table-input" value={studentEditForm.subject_name} onChange={(e) => setStudentEditForm({...studentEditForm, subject_name: e.target.value})} /></td>
+                                    <td><input type="number" className="form-control table-input" style={{width:'60px'}} min="1" max="6" value={studentEditForm.credits || 3} onChange={(e) => setStudentEditForm({...studentEditForm, credits: parseInt(e.target.value) || 3})} /></td>
                                     <td><input type="number" className="form-control table-input" value={studentEditForm.total_marks} onChange={(e) => setStudentEditForm({...studentEditForm, total_marks: e.target.value})} /></td>
                                     <td><input type="number" step="0.01" className="form-control table-input" value={studentEditForm.grade_points} onChange={(e) => setStudentEditForm({...studentEditForm, grade_points: e.target.value})} /></td>
                                     <td><input type="text" className="form-control table-input" value={studentEditForm.grade} onChange={(e) => setStudentEditForm({...studentEditForm, grade: e.target.value})} /></td>
@@ -1065,6 +1144,7 @@ function AdminDashboard() {
                                         <option value="PASS">PASS</option><option value="FAIL">FAIL</option><option value="AB">AB</option><option value="MP">MP</option>
                                       </select>
                                     </td>
+                                    <td><input type="number" className="form-control table-input" style={{width:'60px'}} min="1" value={studentEditForm.attempts || 1} onChange={(e) => setStudentEditForm({...studentEditForm, attempts: parseInt(e.target.value) || 1})} /></td>
                                     <td>
                                       <div style={{ display: 'flex', gap: '4px' }}>
                                         <button className="btn btn-success btn-sm" onClick={saveStudentEditResult}>Save</button>
@@ -1076,10 +1156,12 @@ function AdminDashboard() {
                                   <tr key={result.id}>
                                     <td>{result.subject_code}</td>
                                     <td>{result.subject_name}</td>
+                                    <td>{result.credits || 3}</td>
                                     <td><strong>{result.total_marks}</strong></td>
                                     <td>{result.grade_points}</td>
                                     <td><span className={`grade-badge ${getGradeClass(result.grade)}`}>{result.grade}</span></td>
                                     <td><span className={`status-badge ${getStatusClass(result.status)}`}>{result.status}</span></td>
+                                    <td>{result.attempts || 1}</td>
                                     <td>
                                       <button className="btn btn-primary btn-sm" onClick={() => startStudentEditResult(result)}>Edit</button>
                                     </td>
@@ -1270,7 +1352,7 @@ function AdminDashboard() {
                           <table>
                             <thead>
                               <tr>
-                                <th>Code</th><th>Subject</th><th>Total Marks</th><th>Grade Pts</th><th>Grade</th><th>Status</th><th>Actions</th>
+                                <th>Code</th><th>Subject</th><th>Credits</th><th>Total Marks</th><th>Grade Pts</th><th>Grade</th><th>Status</th><th>Attempts</th><th>Actions</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1279,6 +1361,7 @@ function AdminDashboard() {
                                   <tr key={result.id} className="editing-row">
                                     <td><input type="text" className="form-control table-input" value={editForm.subject_code} onChange={(e) => setEditForm({...editForm, subject_code: e.target.value})} /></td>
                                     <td><input type="text" className="form-control table-input" value={editForm.subject_name} onChange={(e) => setEditForm({...editForm, subject_name: e.target.value})} /></td>
+                                    <td><input type="number" className="form-control table-input" style={{width:'60px'}} min="1" max="6" value={editForm.credits || 3} onChange={(e) => setEditForm({...editForm, credits: parseInt(e.target.value) || 3})} /></td>
                                     <td><input type="number" className="form-control table-input" value={editForm.total_marks} onChange={(e) => setEditForm({...editForm, total_marks: e.target.value})} /></td>
                                     <td><input type="number" step="0.01" className="form-control table-input" value={editForm.grade_points} onChange={(e) => setEditForm({...editForm, grade_points: e.target.value})} /></td>
                                     <td><input type="text" className="form-control table-input" value={editForm.grade} onChange={(e) => setEditForm({...editForm, grade: e.target.value})} /></td>
@@ -1287,6 +1370,7 @@ function AdminDashboard() {
                                         <option value="PASS">PASS</option><option value="FAIL">FAIL</option><option value="AB">AB</option><option value="MP">MP</option>
                                       </select>
                                     </td>
+                                    <td><input type="number" className="form-control table-input" style={{width:'60px'}} min="1" value={editForm.attempts || 1} onChange={(e) => setEditForm({...editForm, attempts: parseInt(e.target.value) || 1})} /></td>
                                     <td>
                                       <div style={{ display: 'flex', gap: '4px' }}>
                                         <button className="btn btn-success btn-sm" onClick={saveEditResult}>Save</button>
@@ -1298,10 +1382,12 @@ function AdminDashboard() {
                                   <tr key={result.id}>
                                     <td>{result.subject_code}</td>
                                     <td>{result.subject_name}</td>
+                                    <td>{result.credits || 3}</td>
                                     <td><strong>{result.total_marks}</strong></td>
                                     <td>{result.grade_points}</td>
                                     <td><span className={`grade-badge ${getGradeClass(result.grade)}`}>{result.grade}</span></td>
                                     <td><span className={`status-badge ${getStatusClass(result.status)}`}>{result.status}</span></td>
+                                    <td>{result.attempts || 1}</td>
                                     <td>
                                       <button className="btn btn-primary btn-sm" onClick={() => startEditResult(result)}>Edit</button>
                                     </td>

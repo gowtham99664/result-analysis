@@ -89,6 +89,7 @@ def init_db():
             semester INT NOT NULL,
             subject_code VARCHAR(50) NOT NULL,
             subject_name VARCHAR(255) NOT NULL,
+            credits INT DEFAULT 3,
             internal_marks INT DEFAULT 0,
             external_marks INT DEFAULT 0,
             total_marks INT DEFAULT 0,
@@ -96,6 +97,8 @@ def init_db():
             grade_points DECIMAL(4,2) DEFAULT 0,
             grade VARCHAR(5) DEFAULT '',
             status ENUM('PASS', 'FAIL', 'AB', 'MP') DEFAULT 'PASS',
+            attempts INT DEFAULT 1,
+            display_order INT DEFAULT 0,
             academic_year VARCHAR(20) NOT NULL DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -103,6 +106,26 @@ def init_db():
             UNIQUE KEY unique_result (roll_number, year, semester, subject_code)
         )
     """)
+
+    # Migration for existing results tables: add credits and attempts columns
+    try:
+        cursor.execute(
+            "ALTER TABLE results ADD COLUMN credits INT DEFAULT 3 AFTER subject_name"
+        )
+    except Exception:
+        pass
+    try:
+        cursor.execute(
+            "ALTER TABLE results ADD COLUMN attempts INT DEFAULT 1 AFTER status"
+        )
+    except Exception:
+        pass
+    try:
+        cursor.execute(
+            "ALTER TABLE results ADD COLUMN display_order INT DEFAULT 0 AFTER attempts"
+        )
+    except Exception:
+        pass
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS semester_summary (

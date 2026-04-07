@@ -2152,101 +2152,6 @@ def admin_overview_stats():
                 "semesters": semesters,
             }
 
-        # 4. Build pass/fail statistics
-        # Per year/semester pass/fail counts (a student passes a semester if they have 0 FAIL/AB/MP subjects)
-        pass_fail_stats = {}
-        cursor.execute(
-            """SELECT r.year, r.semester,
-                      COUNT(DISTINCT r.roll_number) as total_students,
-                      COUNT(DISTINCT CASE WHEN r.status IN ('FAIL', 'AB', 'MP') THEN r.roll_number END) as failed_students
-               FROM results r
-               JOIN students s ON r.roll_number = s.roll_number
-               GROUP BY r.year, r.semester
-               ORDER BY r.year, r.semester"""
-        )
-        for row in cursor.fetchall():
-            key = f"{row['year']}-{row['semester']}"
-            total = row["total_students"]
-            failed = row["failed_students"]
-            passed = total - failed
-            pass_fail_stats[key] = {
-                "year": row["year"],
-                "semester": row["semester"],
-                "total": total,
-                "passed": passed,
-                "failed": failed,
-                "pass_pct": round(passed / total * 100, 1) if total > 0 else 0,
-            }
-
-        # Per branch per year/semester pass/fail
-        branch_pass_fail = {}
-        cursor.execute(
-            """SELECT s.branch, r.year, r.semester,
-                      COUNT(DISTINCT r.roll_number) as total_students,
-                      COUNT(DISTINCT CASE WHEN r.status IN ('FAIL', 'AB', 'MP') THEN r.roll_number END) as failed_students
-               FROM results r
-               JOIN students s ON r.roll_number = s.roll_number
-               GROUP BY s.branch, r.year, r.semester
-               ORDER BY s.branch, r.year, r.semester"""
-        )
-        for row in cursor.fetchall():
-            branch = row["branch"] or "OTHER"
-            if branch not in branch_pass_fail:
-                branch_pass_fail[branch] = {}
-            key = f"{row['year']}-{row['semester']}"
-            total = row["total_students"]
-            failed = row["failed_students"]
-            passed = total - failed
-            branch_pass_fail[branch][key] = {
-                "year": row["year"],
-                "semester": row["semester"],
-                "total": total,
-                "passed": passed,
-                "failed": failed,
-                "pass_pct": round(passed / total * 100, 1) if total > 0 else 0,
-            }
-
-        # Per batch per year/semester pass/fail
-        batch_pass_fail = {}
-        for batch_year, roll_numbers in sorted(batch_students.items()):
-            if not roll_numbers:
-                continue
-            placeholders = ",".join(["%s"] * len(roll_numbers))
-            cursor.execute(
-                f"""SELECT r.year, r.semester,
-                           COUNT(DISTINCT r.roll_number) as total_students,
-                           COUNT(DISTINCT CASE WHEN r.status IN ('FAIL', 'AB', 'MP') THEN r.roll_number END) as failed_students
-                    FROM results r
-                    WHERE r.roll_number IN ({placeholders})
-                    GROUP BY r.year, r.semester
-                    ORDER BY r.year, r.semester""",
-                roll_numbers,
-            )
-            batch_sems = {}
-            for row in cursor.fetchall():
-                key = f"{row['year']}-{row['semester']}"
-                total = row["total_students"]
-                failed = row["failed_students"]
-                passed = total - failed
-                batch_sems[key] = {
-                    "year": row["year"],
-                    "semester": row["semester"],
-                    "total": total,
-                    "passed": passed,
-                    "failed": failed,
-                    "pass_pct": round(passed / total * 100, 1) if total > 0 else 0,
-                }
-            if batch_sems:
-                try:
-                    end_yr = int(batch_year) + 4
-                    b_label = f"{batch_year}-{end_yr}"
-                except (ValueError, TypeError):
-                    b_label = batch_year
-                batch_pass_fail[batch_year] = {
-                    "batch_label": b_label,
-                    "semesters": batch_sems,
-                }
-
         cursor.close()
         conn.close()
 
@@ -2256,9 +2161,6 @@ def admin_overview_stats():
                     "total_students": len(all_students),
                     "branch_breakdown": branch_breakdown,
                     "batch_upload_stats": batch_upload_stats,
-                    "pass_fail_stats": pass_fail_stats,
-                    "branch_pass_fail": branch_pass_fail,
-                    "batch_pass_fail": batch_pass_fail,
                 }
             ),
             200,
@@ -3261,7 +3163,7 @@ def delete_upload(upload_id):
 @app.route("/api/admin/students/filtered", methods=["GET"])
 @jwt_required()
 def get_filtered_students():
-    """Get students with optional branch/section/year/semester filters (admin only)."""
+    """Get students with optional branch/section filters (admin only)."""
     claims = get_jwt()
     if claims.get("role") != "admin":
         return jsonify({"error": "Access denied"}), 403
@@ -3269,51 +3171,25 @@ def get_filtered_students():
     branch = request.args.get("branch", "").strip()
     section = request.args.get("section", "").strip()
     search = request.args.get("search", "").strip()
-    year = request.args.get("year", "").strip()
-    semester = request.args.get("semester", "").strip()
 
     try:
         conn = get_db_connection(use_dict=True)
         cursor = conn.cursor()
 
-        # If year or semester filter is provided, JOIN with results to find students
-        # who have results for that year/semester
-        if year or semester:
-            query = """SELECT DISTINCT s.id, s.full_name, s.roll_number, s.branch, s.section, s.created_at
-                       FROM students s
-                       JOIN results r ON s.roll_number = r.roll_number
-                       WHERE 1=1"""
-        else:
-            query = "SELECT id, full_name, roll_number, branch, section, created_at FROM students WHERE 1=1"
+        query = "SELECT id, full_name, roll_number, branch, section, created_at FROM students WHERE 1=1"
         params = []
 
         if branch:
-            query += (
-                " AND branch = %s" if not (year or semester) else " AND s.branch = %s"
-            )
+            query += " AND branch = %s"
             params.append(branch)
         if section:
-            query += (
-                " AND section = %s" if not (year or semester) else " AND s.section = %s"
-            )
+            query += " AND section = %s"
             params.append(section)
         if search:
-            if year or semester:
-                query += " AND (s.roll_number LIKE %s OR s.full_name LIKE %s)"
-            else:
-                query += " AND (roll_number LIKE %s OR full_name LIKE %s)"
+            query += " AND (roll_number LIKE %s OR full_name LIKE %s)"
             params.extend([f"%{search}%", f"%{search}%"])
-        if year:
-            query += " AND r.year = %s"
-            params.append(int(year))
-        if semester:
-            query += " AND r.semester = %s"
-            params.append(int(semester))
 
-        if year or semester:
-            query += " ORDER BY s.branch, s.section, s.roll_number"
-        else:
-            query += " ORDER BY branch, section, roll_number"
+        query += " ORDER BY branch, section, roll_number"
 
         cursor.execute(query, params)
         students = serialize_rows(cursor.fetchall())

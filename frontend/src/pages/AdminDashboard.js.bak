@@ -24,8 +24,6 @@ function AdminDashboard() {
   const [students, setStudents] = useState([]);
   const [studentFilterBranch, setStudentFilterBranch] = useState('');
   const [studentFilterSection, setStudentFilterSection] = useState('');
-  const [studentFilterYear, setStudentFilterYear] = useState('');
-  const [studentFilterSemester, setStudentFilterSemester] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null);
@@ -135,8 +133,6 @@ function AdminDashboard() {
       if (studentFilterBranch) params.push(`branch=${studentFilterBranch}`);
       if (studentFilterSection) params.push(`section=${studentFilterSection}`);
       if (studentSearch) params.push(`search=${encodeURIComponent(studentSearch)}`);
-      if (studentFilterYear) params.push(`year=${studentFilterYear}`);
-      if (studentFilterSemester) params.push(`semester=${studentFilterSemester}`);
       const url = `${API_URL}/admin/students/filtered${params.length ? '?' + params.join('&') : ''}`;
       const response = await axios.get(url, { headers });
       setStudents(response.data.students);
@@ -226,8 +222,6 @@ function AdminDashboard() {
     if (tab === 'students') {
       setStudentFilterBranch('');
       setStudentFilterSection('');
-      setStudentFilterYear('');
-      setStudentFilterSemester('');
       setStudentSearch('');
       setSelectedStudents([]);
       fetchStudents();
@@ -408,8 +402,6 @@ function AdminDashboard() {
   const handleClearStudentFilter = () => {
     setStudentFilterBranch('');
     setStudentFilterSection('');
-    setStudentFilterYear('');
-    setStudentFilterSemester('');
     setStudentSearch('');
     fetchStudents();
   };
@@ -909,157 +901,6 @@ function AdminDashboard() {
               </div>
             )}
 
-            {/* Pass/Fail Analysis Section */}
-            {overviewStats?.pass_fail_stats && Object.keys(overviewStats.pass_fail_stats).length > 0 && (
-              <>
-                {/* Overall Pass/Fail by Year-Semester */}
-                <div className="table-container" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
-                  <h3 style={{ color: 'var(--primary-color)', marginBottom: '1rem', fontSize: '1rem' }}>Pass/Fail Analysis by Year-Semester</h3>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={Object.keys(overviewStats.pass_fail_stats).sort().map(key => {
-                      const d = overviewStats.pass_fail_stats[key];
-                      return {
-                        name: `Y${YEAR_LABELS[d.year] || d.year}-S${SEM_LABELS[d.semester] || d.semester}`,
-                        Passed: d.passed,
-                        Failed: d.failed,
-                        'Pass %': d.pass_pct,
-                      };
-                    })}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" fontSize={12} />
-                      <YAxis fontSize={12} />
-                      <Tooltip formatter={(value, name) => name === 'Pass %' ? `${value}%` : value} />
-                      <Legend />
-                      <Bar dataKey="Passed" stackId="a" fill="#2e7d32" />
-                      <Bar dataKey="Failed" stackId="a" fill="#c62828" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  {/* Pass/Fail Table */}
-                  <table style={{ marginTop: '1rem' }}>
-                    <thead>
-                      <tr>
-                        <th>Year-Semester</th><th>Total</th><th>Passed</th><th>Failed</th><th>Pass %</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.keys(overviewStats.pass_fail_stats).sort().map(key => {
-                        const d = overviewStats.pass_fail_stats[key];
-                        return (
-                          <tr key={key}>
-                            <td>Year {YEAR_LABELS[d.year] || d.year} - Sem {SEM_LABELS[d.semester] || d.semester}</td>
-                            <td>{d.total}</td>
-                            <td><strong style={{ color: '#2e7d32' }}>{d.passed}</strong></td>
-                            <td><strong style={{ color: '#c62828' }}>{d.failed}</strong></td>
-                            <td>
-                              <span className="sgpa-badge" style={{ background: d.pass_pct >= 80 ? '#e8f5e9' : d.pass_pct >= 50 ? '#fff3e0' : '#ffebee', color: d.pass_pct >= 80 ? '#2e7d32' : d.pass_pct >= 50 ? '#e65100' : '#c62828' }}>
-                                {d.pass_pct}%
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Branch-wise Pass/Fail */}
-                {overviewStats.branch_pass_fail && Object.keys(overviewStats.branch_pass_fail).length > 0 && (
-                  <div className="table-container" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
-                    <h3 style={{ color: 'var(--primary-color)', marginBottom: '1rem', fontSize: '1rem' }}>Branch-wise Pass/Fail Analysis</h3>
-                    <div className="charts-section" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem' }}>
-                      {Object.keys(overviewStats.branch_pass_fail).sort().map(branch => {
-                        const branchData = overviewStats.branch_pass_fail[branch];
-                        const chartData = Object.keys(branchData).sort().map(key => {
-                          const d = branchData[key];
-                          return {
-                            name: `Y${YEAR_LABELS[d.year] || d.year}-S${SEM_LABELS[d.semester] || d.semester}`,
-                            Passed: d.passed,
-                            Failed: d.failed,
-                          };
-                        });
-                        return (
-                          <div key={branch} style={{ border: '1px solid #eee', borderRadius: '8px', padding: '1rem' }}>
-                            <h4 style={{ color: '#333', marginBottom: '0.5rem', fontSize: '0.95rem' }}>{branch}</h4>
-                            <ResponsiveContainer width="100%" height={200}>
-                              <BarChart data={chartData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="name" fontSize={10} />
-                                <YAxis fontSize={10} />
-                                <Tooltip />
-                                <Legend wrapperStyle={{ fontSize: '0.8rem' }} />
-                                <Bar dataKey="Passed" fill="#2e7d32" />
-                                <Bar dataKey="Failed" fill="#c62828" />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Batch-wise Pass/Fail */}
-                {overviewStats.batch_pass_fail && Object.keys(overviewStats.batch_pass_fail).length > 0 && (
-                  <div className="table-container" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
-                    <h3 style={{ color: 'var(--primary-color)', marginBottom: '1rem', fontSize: '1rem' }}>Batch-wise Pass/Fail Analysis</h3>
-                    {Object.keys(overviewStats.batch_pass_fail).sort().map(batchYear => {
-                      const batchData = overviewStats.batch_pass_fail[batchYear];
-                      const chartData = Object.keys(batchData.semesters).sort().map(key => {
-                        const d = batchData.semesters[key];
-                        return {
-                          name: `Y${YEAR_LABELS[d.year] || d.year}-S${SEM_LABELS[d.semester] || d.semester}`,
-                          Passed: d.passed,
-                          Failed: d.failed,
-                          'Pass %': d.pass_pct,
-                        };
-                      });
-                      return (
-                        <div key={batchYear} style={{ marginBottom: '1.5rem', border: '1px solid #eee', borderRadius: '8px', padding: '1rem' }}>
-                          <h4 style={{ color: '#333', marginBottom: '0.5rem', fontSize: '0.95rem' }}>
-                            Batch {batchData.batch_label}
-                          </h4>
-                          <ResponsiveContainer width="100%" height={220}>
-                            <BarChart data={chartData}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="name" fontSize={11} />
-                              <YAxis fontSize={11} />
-                              <Tooltip formatter={(value, name) => name === 'Pass %' ? `${value}%` : value} />
-                              <Legend />
-                              <Bar dataKey="Passed" fill="#2e7d32" />
-                              <Bar dataKey="Failed" fill="#c62828" />
-                            </BarChart>
-                          </ResponsiveContainer>
-                          <table style={{ marginTop: '0.5rem', fontSize: '0.9rem' }}>
-                            <thead>
-                              <tr><th>Semester</th><th>Total</th><th>Passed</th><th>Failed</th><th>Pass %</th></tr>
-                            </thead>
-                            <tbody>
-                              {Object.keys(batchData.semesters).sort().map(key => {
-                                const d = batchData.semesters[key];
-                                return (
-                                  <tr key={key}>
-                                    <td>Year {YEAR_LABELS[d.year] || d.year} - Sem {SEM_LABELS[d.semester] || d.semester}</td>
-                                    <td>{d.total}</td>
-                                    <td style={{ color: '#2e7d32', fontWeight: 'bold' }}>{d.passed}</td>
-                                    <td style={{ color: '#c62828', fontWeight: 'bold' }}>{d.failed}</td>
-                                    <td>
-                                      <span className="sgpa-badge" style={{ background: d.pass_pct >= 80 ? '#e8f5e9' : d.pass_pct >= 50 ? '#fff3e0' : '#ffebee', color: d.pass_pct >= 80 ? '#2e7d32' : d.pass_pct >= 50 ? '#e65100' : '#c62828', fontSize: '0.8rem' }}>
-                                        {d.pass_pct}%
-                                      </span>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            )}
-
             {/* Quick Search */}
             <div className="search-section">
               <form onSubmit={handleSearch} className="search-form">
@@ -1132,24 +973,6 @@ function AdminDashboard() {
                         <option value="A">A</option>
                         <option value="B">B</option>
                         <option value="C">C</option>
-                      </select>
-                    </div>
-                    <div className="filter-group">
-                      <label>Year</label>
-                      <select className="form-control" value={studentFilterYear} onChange={(e) => setStudentFilterYear(e.target.value)}>
-                        <option value="">All Years</option>
-                        <option value="1">I Year</option>
-                        <option value="2">II Year</option>
-                        <option value="3">III Year</option>
-                        <option value="4">IV Year</option>
-                      </select>
-                    </div>
-                    <div className="filter-group">
-                      <label>Semester</label>
-                      <select className="form-control" value={studentFilterSemester} onChange={(e) => setStudentFilterSemester(e.target.value)}>
-                        <option value="">All Semesters</option>
-                        <option value="1">Sem I</option>
-                        <option value="2">Sem II</option>
                       </select>
                     </div>
                     <div className="filter-group" style={{ flex: 2 }}>
@@ -1483,58 +1306,28 @@ function AdminDashboard() {
                   <thead>
                     <tr>
                       <th>#</th><th>Student</th><th>Roll Number</th><th>Branch</th>
-                      <th>Filename</th><th>Year/Semester Data</th><th>Subjects</th>
+                      <th>Filename</th><th>Semesters</th><th>Subjects</th>
                       <th>Uploaded</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {uploads.map((upload, idx) => {
-                      let ysList = [];
-                      try {
-                        const parsed = typeof upload.year_semester_data === 'string'
-                          ? JSON.parse(upload.year_semester_data)
-                          : upload.year_semester_data;
-                        if (Array.isArray(parsed)) {
-                          ysList = parsed;
-                        } else if (parsed && typeof parsed === 'object') {
-                          ysList = Object.entries(parsed).map(([k, v]) => {
-                            const parts = k.split('-');
-                            return { year: parts[0], semester: parts[1], subjects: v };
-                          });
-                        }
-                      } catch (e) { /* ignore parse errors */ }
-
-                      return (
-                        <tr key={upload.id}>
-                          <td>{idx + 1}</td>
-                          <td>{upload.full_name}</td>
-                          <td>{upload.roll_number}</td>
-                          <td>{upload.branch}</td>
-                          <td>{upload.original_filename || '-'}</td>
-                          <td>
-                            {ysList.length > 0 ? (
-                              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                                {ysList.map((ys, i) => (
-                                  <span key={i} className="sgpa-badge" style={{ fontSize: '0.75rem' }}>
-                                    Y{YEAR_LABELS[ys.year] || ys.year}-S{SEM_LABELS[ys.semester] || ys.semester}
-                                    {ys.subjects != null ? ` (${ys.subjects})` : ''}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span style={{ color: '#999' }}>{upload.num_semesters} sem(s)</span>
-                            )}
-                          </td>
-                          <td>{upload.num_subjects}</td>
-                          <td>{upload.upload_time ? new Date(upload.upload_time).toLocaleString() : '-'}</td>
-                          <td>
-                            <button className="btn btn-danger btn-sm" onClick={() => handleDeleteUpload(upload.id)}>
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {uploads.map((upload, idx) => (
+                      <tr key={upload.id}>
+                        <td>{idx + 1}</td>
+                        <td>{upload.full_name}</td>
+                        <td>{upload.roll_number}</td>
+                        <td>{upload.branch}</td>
+                        <td>{upload.original_filename || '-'}</td>
+                        <td>{upload.num_semesters}</td>
+                        <td>{upload.num_subjects}</td>
+                        <td>{upload.upload_time ? new Date(upload.upload_time).toLocaleString() : '-'}</td>
+                        <td>
+                          <button className="btn btn-danger btn-sm" onClick={() => handleDeleteUpload(upload.id)}>
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               ) : (

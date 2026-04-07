@@ -382,7 +382,7 @@ function StudentDashboard() {
       if (correctionFile) formData.append('attachment', correctionFile);
 
       await axios.post(`${API_URL}/student/correction-request`, formData, {
-        headers,
+        headers: { ...headers, 'Content-Type': 'multipart/form-data' },
       });
       toast.success('Correction request submitted successfully!');
       setShowCorrectionForm(null);

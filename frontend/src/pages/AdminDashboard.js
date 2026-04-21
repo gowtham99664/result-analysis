@@ -405,6 +405,29 @@ function AdminDashboard() {
     fetchFilteredStudents();
   };
 
+  const handleDownloadExcel = async () => {
+    try {
+      const params = [];
+      if (studentFilterBranch) params.push(`branch=${studentFilterBranch}`);
+      if (studentFilterSection) params.push(`section=${studentFilterSection}`);
+      if (studentSearch) params.push(`search=${encodeURIComponent(studentSearch)}`);
+      if (studentFilterYear) params.push(`year=${studentFilterYear}`);
+      if (studentFilterSemester) params.push(`semester=${studentFilterSemester}`);
+      const url = `${API_URL}/admin/students/export-excel${params.length ? '?' + params.join('&') : ''}`;
+      const response = await axios.get(url, { headers, responseType: 'blob' });
+      const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.setAttribute('download', `student_report.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      toast.success('Excel downloaded successfully');
+    } catch (error) {
+      toast.error('Failed to download Excel. Make sure there are students to export.');
+    }
+  };
+
   const handleClearStudentFilter = () => {
     setStudentFilterBranch('');
     setStudentFilterSection('');
@@ -1164,6 +1187,7 @@ function AdminDashboard() {
                     </div>
                     <button className="btn btn-primary filter-btn" onClick={handleStudentFilter}>Filter</button>
                     <button className="btn btn-secondary filter-btn" style={{ color: 'var(--primary-color)', borderColor: 'var(--primary-color)' }} onClick={handleClearStudentFilter}>Clear</button>
+                    <button className="btn btn-primary filter-btn" style={{ backgroundColor: '#28a745', borderColor: '#28a745' }} onClick={handleDownloadExcel}>Download Excel</button>
                   </div>
                 </div>
 
@@ -1192,7 +1216,7 @@ function AdminDashboard() {
                           <th style={{ width: '40px' }}>
                             <input type="checkbox" checked={selectedStudents.length === students.length && students.length > 0} onChange={handleSelectAll} />
                           </th>
-                          <th>#</th><th>Full Name</th><th>Roll Number</th><th>Branch</th><th>Section</th><th>Registered</th><th>Actions</th>
+                          <th>#</th><th>Full Name</th><th>Roll Number</th><th>Branch</th><th>Section</th><th>CGPA</th><th>Registered</th><th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1206,6 +1230,7 @@ function AdminDashboard() {
                             <td>{student.roll_number}</td>
                             <td>{student.branch}</td>
                             <td>{student.section}</td>
+                            <td>{student.cgpa || 0}</td>
                             <td>{student.created_at ? new Date(student.created_at).toLocaleDateString() : '-'}</td>
                             <td>
                               <div style={{ display: 'flex', gap: '4px' }}>
@@ -1413,7 +1438,7 @@ function AdminDashboard() {
                                   <tr key={result.id} className="editing-row">
                                     <td><input type="text" className="form-control table-input" value={studentEditForm.subject_code} onChange={(e) => setStudentEditForm({...studentEditForm, subject_code: e.target.value})} /></td>
                                     <td><input type="text" className="form-control table-input" value={studentEditForm.subject_name} onChange={(e) => setStudentEditForm({...studentEditForm, subject_name: e.target.value})} /></td>
-                                    <td><input type="number" className="form-control table-input" style={{width:'60px'}} min="1" max="6" value={studentEditForm.credits || 3} onChange={(e) => setStudentEditForm({...studentEditForm, credits: parseInt(e.target.value) || 3})} /></td>
+                                    <td><input type="number" className="form-control table-input" style={{width:'60px'}} min="0" max="6" value={studentEditForm.credits != null ? studentEditForm.credits : 3} onChange={(e) => setStudentEditForm({...studentEditForm, credits: parseInt(e.target.value) || 0})} /></td>
                                     <td><input type="number" className="form-control table-input" value={studentEditForm.total_marks} onChange={(e) => setStudentEditForm({...studentEditForm, total_marks: e.target.value})} /></td>
                                     <td><input type="number" step="0.01" className="form-control table-input" value={studentEditForm.grade_points} onChange={(e) => setStudentEditForm({...studentEditForm, grade_points: e.target.value})} /></td>
                                     <td><input type="text" className="form-control table-input" value={studentEditForm.grade} onChange={(e) => setStudentEditForm({...studentEditForm, grade: e.target.value})} /></td>
@@ -1516,7 +1541,7 @@ function AdminDashboard() {
                               <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                                 {ysList.map((ys, i) => (
                                   <span key={i} className="sgpa-badge" style={{ fontSize: '0.75rem' }}>
-                                    Y{YEAR_LABELS[ys.year] || ys.year}-S{SEM_LABELS[ys.semester] || ys.semester}
+                                    {YEAR_LABELS[ys.year] || ys.year}-{SEM_LABELS[ys.semester] || ys.semester}
                                     {ys.subjects != null ? ` (${ys.subjects})` : ''}
                                   </span>
                                 ))}
@@ -1669,7 +1694,7 @@ function AdminDashboard() {
                                   <tr key={result.id} className="editing-row">
                                     <td><input type="text" className="form-control table-input" value={editForm.subject_code} onChange={(e) => setEditForm({...editForm, subject_code: e.target.value})} /></td>
                                     <td><input type="text" className="form-control table-input" value={editForm.subject_name} onChange={(e) => setEditForm({...editForm, subject_name: e.target.value})} /></td>
-                                    <td><input type="number" className="form-control table-input" style={{width:'60px'}} min="1" max="6" value={editForm.credits || 3} onChange={(e) => setEditForm({...editForm, credits: parseInt(e.target.value) || 3})} /></td>
+                                    <td><input type="number" className="form-control table-input" style={{width:'60px'}} min="0" max="6" value={editForm.credits != null ? editForm.credits : 3} onChange={(e) => setEditForm({...editForm, credits: parseInt(e.target.value) || 0})} /></td>
                                     <td><input type="number" className="form-control table-input" value={editForm.total_marks} onChange={(e) => setEditForm({...editForm, total_marks: e.target.value})} /></td>
                                     <td><input type="number" step="0.01" className="form-control table-input" value={editForm.grade_points} onChange={(e) => setEditForm({...editForm, grade_points: e.target.value})} /></td>
                                     <td><input type="text" className="form-control table-input" value={editForm.grade} onChange={(e) => setEditForm({...editForm, grade: e.target.value})} /></td>

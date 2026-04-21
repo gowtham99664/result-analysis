@@ -2283,6 +2283,19 @@ def get_all_students():
             "SELECT id, full_name, roll_number, branch, section, created_at FROM students ORDER BY branch, section, roll_number"
         )
         students = serialize_rows(cursor.fetchall())
+
+        # Compute CGPA for each student in bulk
+        if students:
+            roll_numbers = [s["roll_number"] for s in students]
+            placeholders = ",".join(["%s"] * len(roll_numbers))
+            cursor.execute(
+                f"SELECT roll_number, AVG(sgpa) as cgpa FROM semester_summary WHERE roll_number IN ({placeholders}) AND sgpa > 0 GROUP BY roll_number",
+                roll_numbers
+            )
+            cgpa_map = {row["roll_number"]: round(float(row["cgpa"]), 2) for row in cursor.fetchall()}
+            for s in students:
+                s["cgpa"] = cgpa_map.get(s["roll_number"], 0)
+
         cursor.close()
         conn.close()
 
@@ -3317,12 +3330,232 @@ def get_filtered_students():
 
         cursor.execute(query, params)
         students = serialize_rows(cursor.fetchall())
+
+        # Compute CGPA for each student in bulk (filtered by year/semester if provided)
+        if students:
+            roll_numbers = [s["roll_number"] for s in students]
+            placeholders = ",".join(["%s"] * len(roll_numbers))
+            cgpa_query = f"SELECT roll_number, AVG(sgpa) as cgpa FROM semester_summary WHERE roll_number IN ({placeholders}) AND sgpa > 0"
+            cgpa_params = list(roll_numbers)
+            if year and semester:
+                cgpa_query += " AND (year < %s OR (year = %s AND semester <= %s))"
+                cgpa_params.extend([int(year), int(year), int(semester)])
+            elif year:
+                cgpa_query += " AND year <= %s"
+                cgpa_params.append(int(year))
+            cgpa_query += " GROUP BY roll_number"
+            cursor.execute(cgpa_query, cgpa_params)
+            cgpa_map = {row["roll_number"]: round(float(row["cgpa"]), 2) for row in cursor.fetchall()}
+            for s in students:
+                s["cgpa"] = cgpa_map.get(s["roll_number"], 0)
+
         cursor.close()
         conn.close()
 
         return jsonify({"students": students, "count": len(students)}), 200
 
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
+@app.route("/api/admin/students/export-excel", methods=["GET"])
+@jwt_required()
+def export_students_excel():
+    """Export student list with SGPA per semester and CGPA as Excel."""
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"error": "Access denied"}), 403
+
+    branch = request.args.get("branch", "").strip()
+    section = request.args.get("section", "").strip()
+    search = request.args.get("search", "").strip()
+    year = request.args.get("year", "").strip()
+    semester = request.args.get("semester", "").strip()
+
+    try:
+        conn = get_db_connection(use_dict=True)
+        cursor = conn.cursor()
+
+        # Get students (same logic as filtered endpoint)
+        if year or semester:
+            query = """SELECT DISTINCT s.id, s.full_name, s.roll_number, s.branch, s.section
+                       FROM students s
+                       JOIN results r ON s.roll_number = r.roll_number
+                       WHERE 1=1"""
+        else:
+            query = "SELECT id, full_name, roll_number, branch, section FROM students WHERE 1=1"
+        params = []
+
+        if branch:
+            query += (" AND branch = %s" if not (year or semester) else " AND s.branch = %s")
+            params.append(branch)
+        if section:
+            query += (" AND section = %s" if not (year or semester) else " AND s.section = %s")
+            params.append(section)
+        if search:
+            if year or semester:
+                query += " AND (s.roll_number LIKE %s OR s.full_name LIKE %s)"
+            else:
+                query += " AND (roll_number LIKE %s OR full_name LIKE %s)"
+            params.extend([f"%{search}%", f"%{search}%"])
+        if year:
+            query += " AND r.year = %s"
+            params.append(int(year))
+        if semester:
+            query += " AND r.semester = %s"
+            params.append(int(semester))
+
+        if year or semester:
+            query += " ORDER BY s.branch, s.section, s.roll_number"
+        else:
+            query += " ORDER BY branch, section, roll_number"
+
+        cursor.execute(query, params)
+        students = cursor.fetchall()
+
+        if not students:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "No students found for the given filters"}), 404
+
+        roll_numbers = [s["roll_number"] for s in students]
+        placeholders = ",".join(["%s"] * len(roll_numbers))
+
+        # Get all semester summaries for these students (up to year/semester if filtered)
+        sum_query = f"SELECT roll_number, year, semester, sgpa FROM semester_summary WHERE roll_number IN ({placeholders}) AND sgpa > 0"
+        sum_params = list(roll_numbers)
+        if year and semester:
+            sum_query += " AND (year < %s OR (year = %s AND semester <= %s))"
+            sum_params.extend([int(year), int(year), int(semester)])
+        elif year:
+            sum_query += " AND year <= %s"
+            sum_params.append(int(year))
+        sum_query += " ORDER BY year, semester"
+
+        cursor.execute(sum_query, sum_params)
+        summaries = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        # Build semester columns: collect all unique (year, semester) combos
+        sem_set = set()
+        stu_sgpa = {}  # roll -> {(y,s): sgpa}
+        for row in summaries:
+            key = (row["year"], row["semester"])
+            sem_set.add(key)
+            if row["roll_number"] not in stu_sgpa:
+                stu_sgpa[row["roll_number"]] = {}
+            stu_sgpa[row["roll_number"]][key] = float(row["sgpa"])
+
+        sem_cols = sorted(sem_set)  # sorted by year then semester
+
+        year_labels = {1: "I", 2: "II", 3: "III", 4: "IV"}
+        sem_labels = {1: "I", 2: "II"}
+
+        # Build Excel using openpyxl
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        from io import BytesIO
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Student Report"
+
+        # Header style
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill(start_color="2E5090", end_color="2E5090", fill_type="solid")
+        header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        thin_border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin"),
+        )
+        center_align = Alignment(horizontal="center", vertical="center")
+
+        # Title row
+        filter_desc = "All Students"
+        parts = []
+        if branch:
+            parts.append(f"Branch: {branch}")
+        if section:
+            parts.append(f"Section: {section}")
+        if year:
+            parts.append(f"Up to Year: {year_labels.get(int(year), year)}")
+        if semester:
+            parts.append(f"Up to Sem: {sem_labels.get(int(semester), semester)}")
+        if parts:
+            filter_desc = ", ".join(parts)
+
+        total_cols = 4 + len(sem_cols) + 1  # S.No, Roll, Name, Branch, SGPA cols..., CGPA
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
+        title_cell = ws.cell(row=1, column=1, value=f"Student Report — {filter_desc}")
+        title_cell.font = Font(bold=True, size=14, color="2E5090")
+        title_cell.alignment = Alignment(horizontal="center")
+
+        # Headers
+        headers = ["S.No", "Roll Number", "Student Name", "Branch"]
+        for (y, s) in sem_cols:
+            headers.append(f"{year_labels.get(y, y)}-{sem_labels.get(s, s)} SGPA")
+        headers.append("CGPA")
+
+        for col_idx, header in enumerate(headers, 1):
+            cell = ws.cell(row=3, column=col_idx, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+            cell.border = thin_border
+
+        # Data rows
+        for row_idx, stu in enumerate(students, 1):
+            roll = stu["roll_number"]
+            sgpas = stu_sgpa.get(roll, {})
+            sgpa_values = [sgpas.get(key, None) for key in sem_cols]
+            valid_sgpas = [v for v in sgpa_values if v is not None and v > 0]
+            cgpa = round(sum(valid_sgpas) / len(valid_sgpas), 2) if valid_sgpas else 0
+
+            data = [row_idx, roll, stu["full_name"], stu.get("branch", "")]
+            for val in sgpa_values:
+                data.append(val if val is not None else "-")
+            data.append(cgpa)
+
+            for col_idx, value in enumerate(data, 1):
+                cell = ws.cell(row=row_idx + 3, column=col_idx, value=value)
+                cell.border = thin_border
+                if col_idx != 3:  # Don't center name
+                    cell.alignment = center_align
+                # Highlight CGPA
+                if col_idx == len(data):
+                    cell.font = Font(bold=True)
+
+        # Auto-width columns
+        for col_idx in range(1, total_cols + 1):
+            max_len = 0
+            for row in ws.iter_rows(min_row=3, max_row=ws.max_row, min_col=col_idx, max_col=col_idx):
+                for cell in row:
+                    if cell.value:
+                        max_len = max(max_len, len(str(cell.value)))
+            ws.column_dimensions[ws.cell(row=3, column=col_idx).column_letter].width = max(max_len + 3, 10)
+
+        # Save to buffer
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        from flask import send_file
+        filename = f"student_report_{branch or 'all'}_{section or 'all'}.xlsx"
+        return send_file(
+            buffer,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            as_attachment=True,
+            download_name=filename,
+        )
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

@@ -1,0 +1,948 @@
+[0;34m================================================================[0m
+[0;34m  SPMVV Result Analysis - Deployment Script[0m
+[0;34m  Sri Padmavati Mahila Visvavidyalayam[0m
+[0;34m================================================================[0m
+
+[1;33m[Step 1/5] Checking for existing database to backup...[0m
+[0;32m  -> Found running database container. Creating backup...[0m
+mysqld is alive
+[0;32m  -> Database backup created: /opt/result-analysis/backups/db_backup_20260421_210740.sql[0m
+[0;32m  -> Backup size: 16K[0m
+
+[1;33m[Step 2/5] Stopping and removing existing containers...[0m
+[0;32m  -> Stopping & removing: soet-frontend[0m
+soet-frontend
+soet-frontend
+[0;32m  -> Stopping & removing: soet-backend[0m
+soet-backend
+soet-backend
+[0;32m  -> Stopping & removing: soet-db[0m
+soet-db
+soet-db
+[0;32m  -> All existing containers removed[0m
+
+[1;33m[Step 3/5] Removing existing application images...[0m
+[0;32m  -> Removing image: soet-backend:latest[0m
+Untagged: soet-backend:latest
+Deleted: sha256:7323f71b6060cc13001a188b5543855f3973e6afa5f96d270bee26669965c5c2
+Deleted: sha256:87e284d23f5ddade8264b9d308514a8ddcee01cdb06d64e6a89c210fcfc8ba02
+Deleted: sha256:5dfe8d86daeb912f5010a8086cd2f1799e9198d88dce416d7ee2bd5503a203d8
+Deleted: sha256:089c23633a2433f8c96c0a5d7e0086e9061d2c54d99af841a30bb43ac009eedb
+Deleted: sha256:3e385d9535c04e02fb17b09303f000fe217c1dc1f3094f98839a8a9d57f3b5f8
+Deleted: sha256:2a0a65f60e9bd91ce5bc72e52a0969678cfd08820da63fd57e8e2e0343bb7b5e
+Deleted: sha256:3d26f9f05027f73dc3272b5864e93dbc46838ccb6f9a98aeedc9ba17ac179ad9
+Deleted: sha256:f700076e28a1b5f84703ce0f61f9092f7eaa604d2f1d9af6640f056cb0f4beda
+Deleted: sha256:1eff8df0989f24b855719b653018aadda9b20934c1a9c9c54bdfda19f73e70eb
+Deleted: sha256:1c6d169892edae6cc0ad781e97df467753478a5cfcb326dfe32a7ddf90326a2b
+Deleted: sha256:ee6a619dd767d1483be2bcaec6913c442a1c49f7a227379159cb6fd15b3a3800
+Deleted: sha256:dbf28c5b1764efa44800a7ef4f462c07fed06bb47b9736f581bd5b71bf4d69ef
+Deleted: sha256:a717bcb3fff305532ecf33f3b6026aa6885e2852a2c4cdfb315ab072fa644725
+Deleted: sha256:b5b84a5a7c2d2ed53d7be51a91af3f2400a29f4e2c10f8273f52c4529a7a1fdd
+Deleted: sha256:88c3c5680ad67648a6a743a4bc7dc97e1f49659904a09e52d3eb419994a0a875
+Deleted: sha256:80a040aa2988904f179e656981fdc846b70ce0321e7f8cd8b07674e1aad7655a
+[0;32m  -> Removing image: soet-frontend:latest[0m
+Untagged: soet-frontend:latest
+Deleted: sha256:8f4b26aba3cd3a8e89ac15957350c4648f6f42446fcef8caae86c0a1644ef409
+Deleted: sha256:d68ae8340d77b088dbe6446f2ab2a6e3975db993a2347ce78a0ad291e8ce1945
+Deleted: sha256:4c125eae36be9c9e98a937cdfe1f429efbf0ce39265ec08c89f39eab506941d7
+Deleted: sha256:b86abae426852c169dbb99f6f429a1d8b245947cf0c6cb87e4aa6f224e5cae14
+Deleted: sha256:c69704cf078d3c1be386ba6a5537608fe22e4f9dca34f10d7f686e2bf840be51
+Deleted: sha256:0b6d4e35613f9e6d59388c65d69c78053e1c68625af549fc6b1a2823c9642904
+Deleted Images:
+deleted: sha256:c5941f8514ebc39fb6516721d76a3f1fb936d70cc935a08985c052448adea9a0
+deleted: sha256:3d1759fb947cca86a07b72d31461f0ab5bc85d119742becaed627d53e7bcf367
+deleted: sha256:7ce8877526d0558a2e63023d171314b6d823063e7c4ddc51d44d866b401e27ea
+deleted: sha256:fea8fc842d39705aecd65bb4b55f1742bbc14e0002c19e6e2bc7e59fb77050c2
+
+Total reclaimed space: 11.84MB
+[0;32m  -> Old images cleaned up[0m
+
+[1;33m[Step 4/5] Building and starting application...[0m
+[0;32m  -> Network 'soet-network' ready[0m
+[0;32m  -> Volume 'soet-mysql-data' ready[0m
+[1;33m  -> Starting MariaDB...[0m
+f3de59d4be4a7bf717b515f8e46f1adc27a90781e29011530c024ed37ebe1931
+[0;32m  -> MariaDB container started[0m
+[1;33m  -> Waiting for MariaDB to be ready...[0m
+[1;33m  -> Waiting... (2s / 120s)[0m   mysqld is alive
+[0;32m  -> MariaDB is ready![0m
+
+[1;33m  -> Building backend image...[0m
+Sending build context to Docker daemon  398.8kB
+Step 1/10 : FROM python:3.11-slim-bookworm
+ ---> b1d88cc37cf1
+Step 2/10 : WORKDIR /app
+ ---> Running in 806eee8d881f
+Removing intermediate container 806eee8d881f
+ ---> 358468ef6a1d
+Step 3/10 : RUN apt-get update && apt-get install -y --no-install-recommends     libgl1     libglib2.0-0     libsm6     libxext6     libxrender1     poppler-utils     libgomp1     && rm -rf /var/lib/apt/lists/*
+ ---> Running in 30925bc2d9e1
+Get:1 http://deb.debian.org/debian bookworm InRelease [151 kB]
+Get:2 http://deb.debian.org/debian bookworm-updates InRelease [55.4 kB]
+Get:3 http://deb.debian.org/debian-security bookworm-security InRelease [48.0 kB]
+Get:4 http://deb.debian.org/debian bookworm/main amd64 Packages [8792 kB]
+Get:5 http://deb.debian.org/debian bookworm-updates/main amd64 Packages [6924 B]
+Get:6 http://deb.debian.org/debian-security bookworm-security/main amd64 Packages [295 kB]
+Fetched 9349 kB in 1min 25s (110 kB/s)
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following additional packages will be installed:
+  fontconfig-config fonts-dejavu-core libbrotli1 libbsd0 libcairo2 libdeflate0
+  libdrm-amdgpu1 libdrm-common libdrm-intel1 libdrm-nouveau2 libdrm-radeon1
+  libdrm2 libedit2 libelf1 libexpat1 libfontconfig1 libfreetype6
+  libgl1-mesa-dri libglapi-mesa libglvnd0 libglx-mesa0 libglx0 libice6
+  libicu72 libjbig0 libjpeg62-turbo liblcms2-2 liblerc4 libllvm15 libnspr4
+  libnss3 libopenjp2-7 libpciaccess0 libpixman-1-0 libpng16-16 libpoppler126
+  libsensors-config libsensors5 libtiff6 libwebp7 libx11-6 libx11-data
+  libx11-xcb1 libxau6 libxcb-dri2-0 libxcb-dri3-0 libxcb-glx0 libxcb-present0
+  libxcb-randr0 libxcb-render0 libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb1
+  libxdmcp6 libxfixes3 libxml2 libxshmfence1 libxxf86vm1 libz3-4 x11-common
+Suggested packages:
+  low-memory-monitor liblcms2-utils pciutils lm-sensors
+Recommended packages:
+  libglib2.0-data shared-mime-info xdg-user-dirs poppler-data
+The following NEW packages will be installed:
+  fontconfig-config fonts-dejavu-core libbrotli1 libbsd0 libcairo2 libdeflate0
+  libdrm-amdgpu1 libdrm-common libdrm-intel1 libdrm-nouveau2 libdrm-radeon1
+  libdrm2 libedit2 libelf1 libexpat1 libfontconfig1 libfreetype6 libgl1
+  libgl1-mesa-dri libglapi-mesa libglib2.0-0 libglvnd0 libglx-mesa0 libglx0
+  libgomp1 libice6 libicu72 libjbig0 libjpeg62-turbo liblcms2-2 liblerc4
+  libllvm15 libnspr4 libnss3 libopenjp2-7 libpciaccess0 libpixman-1-0
+  libpng16-16 libpoppler126 libsensors-config libsensors5 libsm6 libtiff6
+  libwebp7 libx11-6 libx11-data libx11-xcb1 libxau6 libxcb-dri2-0
+  libxcb-dri3-0 libxcb-glx0 libxcb-present0 libxcb-randr0 libxcb-render0
+  libxcb-shm0 libxcb-sync1 libxcb-xfixes0 libxcb1 libxdmcp6 libxext6
+  libxfixes3 libxml2 libxrender1 libxshmfence1 libxxf86vm1 libz3-4
+  poppler-utils x11-common
+0 upgraded, 68 newly installed, 0 to remove and 2 not upgraded.
+Need to get 61.9 MB of archives.
+After this operation, 244 MB of additional disk space will be used.
+Get:1 http://deb.debian.org/debian bookworm/main amd64 fonts-dejavu-core all 2.37-6 [1068 kB]
+Get:2 http://deb.debian.org/debian bookworm/main amd64 fontconfig-config amd64 2.14.1-4 [315 kB]
+Get:3 http://deb.debian.org/debian bookworm/main amd64 libbrotli1 amd64 1.0.9-2+b6 [275 kB]
+Get:4 http://deb.debian.org/debian bookworm/main amd64 libbsd0 amd64 0.11.7-2 [117 kB]
+Get:5 http://deb.debian.org/debian bookworm/main amd64 libexpat1 amd64 2.5.0-1+deb12u2 [99.9 kB]
+Get:6 http://deb.debian.org/debian-security bookworm-security/main amd64 libpng16-16 amd64 1.6.39-2+deb12u4 [276 kB]
+Get:7 http://deb.debian.org/debian bookworm/main amd64 libfreetype6 amd64 2.12.1+dfsg-5+deb12u4 [398 kB]
+Get:8 http://deb.debian.org/debian bookworm/main amd64 libfontconfig1 amd64 2.14.1-4 [386 kB]
+Get:9 http://deb.debian.org/debian bookworm/main amd64 libpixman-1-0 amd64 0.42.2-1 [546 kB]
+Get:10 http://deb.debian.org/debian bookworm/main amd64 libxau6 amd64 1:1.0.9-1 [19.7 kB]
+Get:11 http://deb.debian.org/debian bookworm/main amd64 libxdmcp6 amd64 1:1.1.2-3 [26.3 kB]
+Get:12 http://deb.debian.org/debian bookworm/main amd64 libxcb1 amd64 1.15-1 [144 kB]
+Get:13 http://deb.debian.org/debian bookworm/main amd64 libx11-data all 2:1.8.4-2+deb12u2 [292 kB]
+Get:14 http://deb.debian.org/debian bookworm/main amd64 libx11-6 amd64 2:1.8.4-2+deb12u2 [760 kB]
+Get:15 http://deb.debian.org/debian bookworm/main amd64 libxcb-render0 amd64 1.15-1 [115 kB]
+Get:16 http://deb.debian.org/debian bookworm/main amd64 libxcb-shm0 amd64 1.15-1 [105 kB]
+Get:17 http://deb.debian.org/debian bookworm/main amd64 libxext6 amd64 2:1.3.4-1+b1 [52.9 kB]
+Get:18 http://deb.debian.org/debian bookworm/main amd64 libxrender1 amd64 1:0.9.10-1.1 [33.2 kB]
+Get:19 http://deb.debian.org/debian bookworm/main amd64 libcairo2 amd64 1.16.0-7 [575 kB]
+Get:20 http://deb.debian.org/debian bookworm/main amd64 libdeflate0 amd64 1.14-1 [61.4 kB]
+Get:21 http://deb.debian.org/debian bookworm/main amd64 libdrm-common all 2.4.114-1 [7112 B]
+Get:22 http://deb.debian.org/debian bookworm/main amd64 libdrm2 amd64 2.4.114-1+b1 [37.5 kB]
+Get:23 http://deb.debian.org/debian bookworm/main amd64 libdrm-amdgpu1 amd64 2.4.114-1+b1 [20.9 kB]
+Get:24 http://deb.debian.org/debian bookworm/main amd64 libpciaccess0 amd64 0.17-2 [51.4 kB]
+Get:25 http://deb.debian.org/debian bookworm/main amd64 libdrm-intel1 amd64 2.4.114-1+b1 [64.0 kB]
+Get:26 http://deb.debian.org/debian bookworm/main amd64 libdrm-nouveau2 amd64 2.4.114-1+b1 [19.1 kB]
+Get:27 http://deb.debian.org/debian bookworm/main amd64 libdrm-radeon1 amd64 2.4.114-1+b1 [21.8 kB]
+Get:28 http://deb.debian.org/debian bookworm/main amd64 libedit2 amd64 3.1-20221030-2 [93.0 kB]
+Get:29 http://deb.debian.org/debian bookworm/main amd64 libelf1 amd64 0.188-2.1 [174 kB]
+Get:30 http://deb.debian.org/debian bookworm/main amd64 libglvnd0 amd64 1.6.0-1 [51.8 kB]
+Get:31 http://deb.debian.org/debian bookworm/main amd64 libglapi-mesa amd64 22.3.6-1+deb12u1 [35.7 kB]
+Get:32 http://deb.debian.org/debian bookworm/main amd64 libx11-xcb1 amd64 2:1.8.4-2+deb12u2 [192 kB]
+Get:33 http://deb.debian.org/debian bookworm/main amd64 libxcb-dri2-0 amd64 1.15-1 [107 kB]
+Get:34 http://deb.debian.org/debian bookworm/main amd64 libxcb-dri3-0 amd64 1.15-1 [107 kB]
+Get:35 http://deb.debian.org/debian bookworm/main amd64 libxcb-glx0 amd64 1.15-1 [122 kB]
+Get:36 http://deb.debian.org/debian bookworm/main amd64 libxcb-present0 amd64 1.15-1 [105 kB]
+Get:37 http://deb.debian.org/debian bookworm/main amd64 libxcb-randr0 amd64 1.15-1 [117 kB]
+Get:38 http://deb.debian.org/debian bookworm/main amd64 libxcb-sync1 amd64 1.15-1 [109 kB]
+Get:39 http://deb.debian.org/debian bookworm/main amd64 libxcb-xfixes0 amd64 1.15-1 [109 kB]
+Get:40 http://deb.debian.org/debian bookworm/main amd64 libxfixes3 amd64 1:6.0.0-2 [22.7 kB]
+Get:41 http://deb.debian.org/debian bookworm/main amd64 libxshmfence1 amd64 1.3-1 [8820 B]
+Get:42 http://deb.debian.org/debian bookworm/main amd64 libxxf86vm1 amd64 1:1.1.4-1+b2 [20.8 kB]
+Get:43 http://deb.debian.org/debian bookworm/main amd64 libicu72 amd64 72.1-3+deb12u1 [9376 kB]
+Get:44 http://deb.debian.org/debian bookworm/main amd64 libxml2 amd64 2.9.14+dfsg-1.3~deb12u5 [688 kB]
+Get:45 http://deb.debian.org/debian bookworm/main amd64 libz3-4 amd64 4.8.12-3.1 [7216 kB]
+Get:46 http://deb.debian.org/debian bookworm/main amd64 libllvm15 amd64 1:15.0.6-4+b1 [23.1 MB]
+Get:47 http://deb.debian.org/debian bookworm/main amd64 libsensors-config all 1:3.6.0-7.1 [14.3 kB]
+Get:48 http://deb.debian.org/debian bookworm/main amd64 libsensors5 amd64 1:3.6.0-7.1 [34.2 kB]
+Get:49 http://deb.debian.org/debian bookworm/main amd64 libgl1-mesa-dri amd64 22.3.6-1+deb12u1 [7239 kB]
+Get:50 http://deb.debian.org/debian bookworm/main amd64 libglx-mesa0 amd64 22.3.6-1+deb12u1 [147 kB]
+Get:51 http://deb.debian.org/debian bookworm/main amd64 libglx0 amd64 1.6.0-1 [34.4 kB]
+Get:52 http://deb.debian.org/debian bookworm/main amd64 libgl1 amd64 1.6.0-1 [88.4 kB]
+Get:53 http://deb.debian.org/debian bookworm/main amd64 libglib2.0-0 amd64 2.74.6-2+deb12u8 [1402 kB]
+Get:54 http://deb.debian.org/debian bookworm/main amd64 libgomp1 amd64 12.2.0-14+deb12u1 [116 kB]
+Get:55 http://deb.debian.org/debian bookworm/main amd64 x11-common all 1:7.7+23 [252 kB]
+Get:56 http://deb.debian.org/debian bookworm/main amd64 libice6 amd64 2:1.0.10-1 [58.5 kB]
+Get:57 http://deb.debian.org/debian bookworm/main amd64 libjbig0 amd64 2.1-6.1 [31.7 kB]
+Get:58 http://deb.debian.org/debian bookworm/main amd64 libjpeg62-turbo amd64 1:2.1.5-2 [166 kB]
+Get:59 http://deb.debian.org/debian bookworm/main amd64 liblcms2-2 amd64 2.14-2 [154 kB]
+Get:60 http://deb.debian.org/debian bookworm/main amd64 liblerc4 amd64 4.0.0+ds-2 [170 kB]
+Get:61 http://deb.debian.org/debian bookworm/main amd64 libnspr4 amd64 2:4.35-1 [113 kB]
+Get:62 http://deb.debian.org/debian-security bookworm-security/main amd64 libnss3 amd64 2:3.87.1-1+deb12u2 [1332 kB]
+Get:63 http://deb.debian.org/debian bookworm/main amd64 libopenjp2-7 amd64 2.5.0-2+deb12u2 [189 kB]
+Get:64 http://deb.debian.org/debian bookworm/main amd64 libwebp7 amd64 1.2.4-0.2+deb12u1 [286 kB]
+Get:65 http://deb.debian.org/debian-security bookworm-security/main amd64 libtiff6 amd64 4.5.0-6+deb12u4 [316 kB]
+Get:66 http://deb.debian.org/debian bookworm/main amd64 libpoppler126 amd64 22.12.0-2+deb12u1 [1853 kB]
+Get:67 http://deb.debian.org/debian bookworm/main amd64 libsm6 amd64 2:1.2.3-1 [35.1 kB]
+Get:68 http://deb.debian.org/debian bookworm/main amd64 poppler-utils amd64 22.12.0-2+deb12u1 [191 kB]
+[91mdebconf: delaying package configuration, since apt-utils is not installed
+[0mFetched 61.9 MB in 2min 21s (439 kB/s)
+Selecting previously unselected package fonts-dejavu-core.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 6695 files and directories currently installed.)
+Preparing to unpack .../00-fonts-dejavu-core_2.37-6_all.deb ...
+Unpacking fonts-dejavu-core (2.37-6) ...
+Selecting previously unselected package fontconfig-config.
+Preparing to unpack .../01-fontconfig-config_2.14.1-4_amd64.deb ...
+Unpacking fontconfig-config (2.14.1-4) ...
+Selecting previously unselected package libbrotli1:amd64.
+Preparing to unpack .../02-libbrotli1_1.0.9-2+b6_amd64.deb ...
+Unpacking libbrotli1:amd64 (1.0.9-2+b6) ...
+Selecting previously unselected package libbsd0:amd64.
+Preparing to unpack .../03-libbsd0_0.11.7-2_amd64.deb ...
+Unpacking libbsd0:amd64 (0.11.7-2) ...
+Selecting previously unselected package libexpat1:amd64.
+Preparing to unpack .../04-libexpat1_2.5.0-1+deb12u2_amd64.deb ...
+Unpacking libexpat1:amd64 (2.5.0-1+deb12u2) ...
+Selecting previously unselected package libpng16-16:amd64.
+Preparing to unpack .../05-libpng16-16_1.6.39-2+deb12u4_amd64.deb ...
+Unpacking libpng16-16:amd64 (1.6.39-2+deb12u4) ...
+Selecting previously unselected package libfreetype6:amd64.
+Preparing to unpack .../06-libfreetype6_2.12.1+dfsg-5+deb12u4_amd64.deb ...
+Unpacking libfreetype6:amd64 (2.12.1+dfsg-5+deb12u4) ...
+Selecting previously unselected package libfontconfig1:amd64.
+Preparing to unpack .../07-libfontconfig1_2.14.1-4_amd64.deb ...
+Unpacking libfontconfig1:amd64 (2.14.1-4) ...
+Selecting previously unselected package libpixman-1-0:amd64.
+Preparing to unpack .../08-libpixman-1-0_0.42.2-1_amd64.deb ...
+Unpacking libpixman-1-0:amd64 (0.42.2-1) ...
+Selecting previously unselected package libxau6:amd64.
+Preparing to unpack .../09-libxau6_1%3a1.0.9-1_amd64.deb ...
+Unpacking libxau6:amd64 (1:1.0.9-1) ...
+Selecting previously unselected package libxdmcp6:amd64.
+Preparing to unpack .../10-libxdmcp6_1%3a1.1.2-3_amd64.deb ...
+Unpacking libxdmcp6:amd64 (1:1.1.2-3) ...
+Selecting previously unselected package libxcb1:amd64.
+Preparing to unpack .../11-libxcb1_1.15-1_amd64.deb ...
+Unpacking libxcb1:amd64 (1.15-1) ...
+Selecting previously unselected package libx11-data.
+Preparing to unpack .../12-libx11-data_2%3a1.8.4-2+deb12u2_all.deb ...
+Unpacking libx11-data (2:1.8.4-2+deb12u2) ...
+Selecting previously unselected package libx11-6:amd64.
+Preparing to unpack .../13-libx11-6_2%3a1.8.4-2+deb12u2_amd64.deb ...
+Unpacking libx11-6:amd64 (2:1.8.4-2+deb12u2) ...
+Selecting previously unselected package libxcb-render0:amd64.
+Preparing to unpack .../14-libxcb-render0_1.15-1_amd64.deb ...
+Unpacking libxcb-render0:amd64 (1.15-1) ...
+Selecting previously unselected package libxcb-shm0:amd64.
+Preparing to unpack .../15-libxcb-shm0_1.15-1_amd64.deb ...
+Unpacking libxcb-shm0:amd64 (1.15-1) ...
+Selecting previously unselected package libxext6:amd64.
+Preparing to unpack .../16-libxext6_2%3a1.3.4-1+b1_amd64.deb ...
+Unpacking libxext6:amd64 (2:1.3.4-1+b1) ...
+Selecting previously unselected package libxrender1:amd64.
+Preparing to unpack .../17-libxrender1_1%3a0.9.10-1.1_amd64.deb ...
+Unpacking libxrender1:amd64 (1:0.9.10-1.1) ...
+Selecting previously unselected package libcairo2:amd64.
+Preparing to unpack .../18-libcairo2_1.16.0-7_amd64.deb ...
+Unpacking libcairo2:amd64 (1.16.0-7) ...
+Selecting previously unselected package libdeflate0:amd64.
+Preparing to unpack .../19-libdeflate0_1.14-1_amd64.deb ...
+Unpacking libdeflate0:amd64 (1.14-1) ...
+Selecting previously unselected package libdrm-common.
+Preparing to unpack .../20-libdrm-common_2.4.114-1_all.deb ...
+Unpacking libdrm-common (2.4.114-1) ...
+Selecting previously unselected package libdrm2:amd64.
+Preparing to unpack .../21-libdrm2_2.4.114-1+b1_amd64.deb ...
+Unpacking libdrm2:amd64 (2.4.114-1+b1) ...
+Selecting previously unselected package libdrm-amdgpu1:amd64.
+Preparing to unpack .../22-libdrm-amdgpu1_2.4.114-1+b1_amd64.deb ...
+Unpacking libdrm-amdgpu1:amd64 (2.4.114-1+b1) ...
+Selecting previously unselected package libpciaccess0:amd64.
+Preparing to unpack .../23-libpciaccess0_0.17-2_amd64.deb ...
+Unpacking libpciaccess0:amd64 (0.17-2) ...
+Selecting previously unselected package libdrm-intel1:amd64.
+Preparing to unpack .../24-libdrm-intel1_2.4.114-1+b1_amd64.deb ...
+Unpacking libdrm-intel1:amd64 (2.4.114-1+b1) ...
+Selecting previously unselected package libdrm-nouveau2:amd64.
+Preparing to unpack .../25-libdrm-nouveau2_2.4.114-1+b1_amd64.deb ...
+Unpacking libdrm-nouveau2:amd64 (2.4.114-1+b1) ...
+Selecting previously unselected package libdrm-radeon1:amd64.
+Preparing to unpack .../26-libdrm-radeon1_2.4.114-1+b1_amd64.deb ...
+Unpacking libdrm-radeon1:amd64 (2.4.114-1+b1) ...
+Selecting previously unselected package libedit2:amd64.
+Preparing to unpack .../27-libedit2_3.1-20221030-2_amd64.deb ...
+Unpacking libedit2:amd64 (3.1-20221030-2) ...
+Selecting previously unselected package libelf1:amd64.
+Preparing to unpack .../28-libelf1_0.188-2.1_amd64.deb ...
+Unpacking libelf1:amd64 (0.188-2.1) ...
+Selecting previously unselected package libglvnd0:amd64.
+Preparing to unpack .../29-libglvnd0_1.6.0-1_amd64.deb ...
+Unpacking libglvnd0:amd64 (1.6.0-1) ...
+Selecting previously unselected package libglapi-mesa:amd64.
+Preparing to unpack .../30-libglapi-mesa_22.3.6-1+deb12u1_amd64.deb ...
+Unpacking libglapi-mesa:amd64 (22.3.6-1+deb12u1) ...
+Selecting previously unselected package libx11-xcb1:amd64.
+Preparing to unpack .../31-libx11-xcb1_2%3a1.8.4-2+deb12u2_amd64.deb ...
+Unpacking libx11-xcb1:amd64 (2:1.8.4-2+deb12u2) ...
+Selecting previously unselected package libxcb-dri2-0:amd64.
+Preparing to unpack .../32-libxcb-dri2-0_1.15-1_amd64.deb ...
+Unpacking libxcb-dri2-0:amd64 (1.15-1) ...
+Selecting previously unselected package libxcb-dri3-0:amd64.
+Preparing to unpack .../33-libxcb-dri3-0_1.15-1_amd64.deb ...
+Unpacking libxcb-dri3-0:amd64 (1.15-1) ...
+Selecting previously unselected package libxcb-glx0:amd64.
+Preparing to unpack .../34-libxcb-glx0_1.15-1_amd64.deb ...
+Unpacking libxcb-glx0:amd64 (1.15-1) ...
+Selecting previously unselected package libxcb-present0:amd64.
+Preparing to unpack .../35-libxcb-present0_1.15-1_amd64.deb ...
+Unpacking libxcb-present0:amd64 (1.15-1) ...
+Selecting previously unselected package libxcb-randr0:amd64.
+Preparing to unpack .../36-libxcb-randr0_1.15-1_amd64.deb ...
+Unpacking libxcb-randr0:amd64 (1.15-1) ...
+Selecting previously unselected package libxcb-sync1:amd64.
+Preparing to unpack .../37-libxcb-sync1_1.15-1_amd64.deb ...
+Unpacking libxcb-sync1:amd64 (1.15-1) ...
+Selecting previously unselected package libxcb-xfixes0:amd64.
+Preparing to unpack .../38-libxcb-xfixes0_1.15-1_amd64.deb ...
+Unpacking libxcb-xfixes0:amd64 (1.15-1) ...
+Selecting previously unselected package libxfixes3:amd64.
+Preparing to unpack .../39-libxfixes3_1%3a6.0.0-2_amd64.deb ...
+Unpacking libxfixes3:amd64 (1:6.0.0-2) ...
+Selecting previously unselected package libxshmfence1:amd64.
+Preparing to unpack .../40-libxshmfence1_1.3-1_amd64.deb ...
+Unpacking libxshmfence1:amd64 (1.3-1) ...
+Selecting previously unselected package libxxf86vm1:amd64.
+Preparing to unpack .../41-libxxf86vm1_1%3a1.1.4-1+b2_amd64.deb ...
+Unpacking libxxf86vm1:amd64 (1:1.1.4-1+b2) ...
+Selecting previously unselected package libicu72:amd64.
+Preparing to unpack .../42-libicu72_72.1-3+deb12u1_amd64.deb ...
+Unpacking libicu72:amd64 (72.1-3+deb12u1) ...
+Selecting previously unselected package libxml2:amd64.
+Preparing to unpack .../43-libxml2_2.9.14+dfsg-1.3~deb12u5_amd64.deb ...
+Unpacking libxml2:amd64 (2.9.14+dfsg-1.3~deb12u5) ...
+Selecting previously unselected package libz3-4:amd64.
+Preparing to unpack .../44-libz3-4_4.8.12-3.1_amd64.deb ...
+Unpacking libz3-4:amd64 (4.8.12-3.1) ...
+Selecting previously unselected package libllvm15:amd64.
+Preparing to unpack .../45-libllvm15_1%3a15.0.6-4+b1_amd64.deb ...
+Unpacking libllvm15:amd64 (1:15.0.6-4+b1) ...
+Selecting previously unselected package libsensors-config.
+Preparing to unpack .../46-libsensors-config_1%3a3.6.0-7.1_all.deb ...
+Unpacking libsensors-config (1:3.6.0-7.1) ...
+Selecting previously unselected package libsensors5:amd64.
+Preparing to unpack .../47-libsensors5_1%3a3.6.0-7.1_amd64.deb ...
+Unpacking libsensors5:amd64 (1:3.6.0-7.1) ...
+Selecting previously unselected package libgl1-mesa-dri:amd64.
+Preparing to unpack .../48-libgl1-mesa-dri_22.3.6-1+deb12u1_amd64.deb ...
+Unpacking libgl1-mesa-dri:amd64 (22.3.6-1+deb12u1) ...
+Selecting previously unselected package libglx-mesa0:amd64.
+Preparing to unpack .../49-libglx-mesa0_22.3.6-1+deb12u1_amd64.deb ...
+Unpacking libglx-mesa0:amd64 (22.3.6-1+deb12u1) ...
+Selecting previously unselected package libglx0:amd64.
+Preparing to unpack .../50-libglx0_1.6.0-1_amd64.deb ...
+Unpacking libglx0:amd64 (1.6.0-1) ...
+Selecting previously unselected package libgl1:amd64.
+Preparing to unpack .../51-libgl1_1.6.0-1_amd64.deb ...
+Unpacking libgl1:amd64 (1.6.0-1) ...
+Selecting previously unselected package libglib2.0-0:amd64.
+Preparing to unpack .../52-libglib2.0-0_2.74.6-2+deb12u8_amd64.deb ...
+Unpacking libglib2.0-0:amd64 (2.74.6-2+deb12u8) ...
+Selecting previously unselected package libgomp1:amd64.
+Preparing to unpack .../53-libgomp1_12.2.0-14+deb12u1_amd64.deb ...
+Unpacking libgomp1:amd64 (12.2.0-14+deb12u1) ...
+Selecting previously unselected package x11-common.
+Preparing to unpack .../54-x11-common_1%3a7.7+23_all.deb ...
+Unpacking x11-common (1:7.7+23) ...
+Selecting previously unselected package libice6:amd64.
+Preparing to unpack .../55-libice6_2%3a1.0.10-1_amd64.deb ...
+Unpacking libice6:amd64 (2:1.0.10-1) ...
+Selecting previously unselected package libjbig0:amd64.
+Preparing to unpack .../56-libjbig0_2.1-6.1_amd64.deb ...
+Unpacking libjbig0:amd64 (2.1-6.1) ...
+Selecting previously unselected package libjpeg62-turbo:amd64.
+Preparing to unpack .../57-libjpeg62-turbo_1%3a2.1.5-2_amd64.deb ...
+Unpacking libjpeg62-turbo:amd64 (1:2.1.5-2) ...
+Selecting previously unselected package liblcms2-2:amd64.
+Preparing to unpack .../58-liblcms2-2_2.14-2_amd64.deb ...
+Unpacking liblcms2-2:amd64 (2.14-2) ...
+Selecting previously unselected package liblerc4:amd64.
+Preparing to unpack .../59-liblerc4_4.0.0+ds-2_amd64.deb ...
+Unpacking liblerc4:amd64 (4.0.0+ds-2) ...
+Selecting previously unselected package libnspr4:amd64.
+Preparing to unpack .../60-libnspr4_2%3a4.35-1_amd64.deb ...
+Unpacking libnspr4:amd64 (2:4.35-1) ...
+Selecting previously unselected package libnss3:amd64.
+Preparing to unpack .../61-libnss3_2%3a3.87.1-1+deb12u2_amd64.deb ...
+Unpacking libnss3:amd64 (2:3.87.1-1+deb12u2) ...
+Selecting previously unselected package libopenjp2-7:amd64.
+Preparing to unpack .../62-libopenjp2-7_2.5.0-2+deb12u2_amd64.deb ...
+Unpacking libopenjp2-7:amd64 (2.5.0-2+deb12u2) ...
+Selecting previously unselected package libwebp7:amd64.
+Preparing to unpack .../63-libwebp7_1.2.4-0.2+deb12u1_amd64.deb ...
+Unpacking libwebp7:amd64 (1.2.4-0.2+deb12u1) ...
+Selecting previously unselected package libtiff6:amd64.
+Preparing to unpack .../64-libtiff6_4.5.0-6+deb12u4_amd64.deb ...
+Unpacking libtiff6:amd64 (4.5.0-6+deb12u4) ...
+Selecting previously unselected package libpoppler126:amd64.
+Preparing to unpack .../65-libpoppler126_22.12.0-2+deb12u1_amd64.deb ...
+Unpacking libpoppler126:amd64 (22.12.0-2+deb12u1) ...
+Selecting previously unselected package libsm6:amd64.
+Preparing to unpack .../66-libsm6_2%3a1.2.3-1_amd64.deb ...
+Unpacking libsm6:amd64 (2:1.2.3-1) ...
+Selecting previously unselected package poppler-utils.
+Preparing to unpack .../67-poppler-utils_22.12.0-2+deb12u1_amd64.deb ...
+Unpacking poppler-utils (22.12.0-2+deb12u1) ...
+Setting up libexpat1:amd64 (2.5.0-1+deb12u2) ...
+Setting up liblcms2-2:amd64 (2.14-2) ...
+Setting up libpixman-1-0:amd64 (0.42.2-1) ...
+Setting up libpciaccess0:amd64 (0.17-2) ...
+Setting up libxau6:amd64 (1:1.0.9-1) ...
+Setting up libicu72:amd64 (72.1-3+deb12u1) ...
+Setting up liblerc4:amd64 (4.0.0+ds-2) ...
+Setting up libglib2.0-0:amd64 (2.74.6-2+deb12u8) ...
+No schema files found: doing nothing.
+Setting up libglvnd0:amd64 (1.6.0-1) ...
+Setting up libbrotli1:amd64 (1.0.9-2+b6) ...
+Setting up x11-common (1:7.7+23) ...
+debconf: unable to initialize frontend: Dialog
+debconf: (TERM is not set, so the dialog frontend is not usable.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC contains: /etc/perl /usr/local/lib/x86_64-linux-gnu/perl/5.36.0 /usr/local/share/perl/5.36.0 /usr/lib/x86_64-linux-gnu/perl5/5.36 /usr/share/perl5 /usr/lib/x86_64-linux-gnu/perl-base /usr/lib/x86_64-linux-gnu/perl/5.36 /usr/share/perl/5.36 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 7.)
+debconf: falling back to frontend: Teletype
+invoke-rc.d: could not determine current runlevel
+invoke-rc.d: policy-rc.d denied execution of restart.
+Setting up libsensors-config (1:3.6.0-7.1) ...
+Setting up libdeflate0:amd64 (1.14-1) ...
+Setting up libgomp1:amd64 (12.2.0-14+deb12u1) ...
+Setting up libjbig0:amd64 (2.1-6.1) ...
+Setting up libz3-4:amd64 (4.8.12-3.1) ...
+Setting up libjpeg62-turbo:amd64 (1:2.1.5-2) ...
+Setting up libx11-data (2:1.8.4-2+deb12u2) ...
+Setting up libnspr4:amd64 (2:4.35-1) ...
+Setting up libpng16-16:amd64 (1.6.39-2+deb12u4) ...
+Setting up fonts-dejavu-core (2.37-6) ...
+Setting up libsensors5:amd64 (1:3.6.0-7.1) ...
+Setting up libglapi-mesa:amd64 (22.3.6-1+deb12u1) ...
+Setting up libwebp7:amd64 (1.2.4-0.2+deb12u1) ...
+Setting up libxshmfence1:amd64 (1.3-1) ...
+Setting up libtiff6:amd64 (4.5.0-6+deb12u4) ...
+Setting up libopenjp2-7:amd64 (2.5.0-2+deb12u2) ...
+Setting up libbsd0:amd64 (0.11.7-2) ...
+Setting up libdrm-common (2.4.114-1) ...
+Setting up libelf1:amd64 (0.188-2.1) ...
+Setting up libxml2:amd64 (2.9.14+dfsg-1.3~deb12u5) ...
+Setting up libice6:amd64 (2:1.0.10-1) ...
+Setting up libxdmcp6:amd64 (1:1.1.2-3) ...
+Setting up libxcb1:amd64 (1.15-1) ...
+Setting up libxcb-xfixes0:amd64 (1.15-1) ...
+Setting up libxcb-render0:amd64 (1.15-1) ...
+Setting up fontconfig-config (2.14.1-4) ...
+debconf: unable to initialize frontend: Dialog
+debconf: (TERM is not set, so the dialog frontend is not usable.)
+debconf: falling back to frontend: Readline
+debconf: unable to initialize frontend: Readline
+debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC contains: /etc/perl /usr/local/lib/x86_64-linux-gnu/perl/5.36.0 /usr/local/share/perl/5.36.0 /usr/lib/x86_64-linux-gnu/perl5/5.36 /usr/share/perl5 /usr/lib/x86_64-linux-gnu/perl-base /usr/lib/x86_64-linux-gnu/perl/5.36 /usr/share/perl/5.36 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 7.)
+debconf: falling back to frontend: Teletype
+Setting up libxcb-glx0:amd64 (1.15-1) ...
+Setting up libedit2:amd64 (3.1-20221030-2) ...
+Setting up libnss3:amd64 (2:3.87.1-1+deb12u2) ...
+Setting up libxcb-shm0:amd64 (1.15-1) ...
+Setting up libxcb-present0:amd64 (1.15-1) ...
+Setting up libfreetype6:amd64 (2.12.1+dfsg-5+deb12u4) ...
+Setting up libxcb-sync1:amd64 (1.15-1) ...
+Setting up libxcb-dri2-0:amd64 (1.15-1) ...
+Setting up libdrm2:amd64 (2.4.114-1+b1) ...
+Setting up libxcb-randr0:amd64 (1.15-1) ...
+Setting up libllvm15:amd64 (1:15.0.6-4+b1) ...
+Setting up libx11-6:amd64 (2:1.8.4-2+deb12u2) ...
+Setting up libfontconfig1:amd64 (2.14.1-4) ...
+Setting up libsm6:amd64 (2:1.2.3-1) ...
+Setting up libdrm-amdgpu1:amd64 (2.4.114-1+b1) ...
+Setting up libxcb-dri3-0:amd64 (1.15-1) ...
+Setting up libx11-xcb1:amd64 (2:1.8.4-2+deb12u2) ...
+Setting up libdrm-nouveau2:amd64 (2.4.114-1+b1) ...
+Setting up libxrender1:amd64 (1:0.9.10-1.1) ...
+Setting up libdrm-radeon1:amd64 (2.4.114-1+b1) ...
+Setting up libdrm-intel1:amd64 (2.4.114-1+b1) ...
+Setting up libgl1-mesa-dri:amd64 (22.3.6-1+deb12u1) ...
+Setting up libxext6:amd64 (2:1.3.4-1+b1) ...
+Setting up libcairo2:amd64 (1.16.0-7) ...
+Setting up libxxf86vm1:amd64 (1:1.1.4-1+b2) ...
+Setting up libxfixes3:amd64 (1:6.0.0-2) ...
+Setting up libpoppler126:amd64 (22.12.0-2+deb12u1) ...
+Setting up poppler-utils (22.12.0-2+deb12u1) ...
+Setting up libglx-mesa0:amd64 (22.3.6-1+deb12u1) ...
+Setting up libglx0:amd64 (1.6.0-1) ...
+Setting up libgl1:amd64 (1.6.0-1) ...
+Processing triggers for libc-bin (2.36-9+deb12u13) ...
+Removing intermediate container 30925bc2d9e1
+ ---> 2810589dc168
+Step 4/10 : COPY requirements.txt .
+ ---> 244a7e7070d6
+Step 5/10 : RUN pip install --no-cache-dir -r requirements.txt
+ ---> Running in ab0f820786bd
+Collecting Flask==3.0.0 (from -r requirements.txt (line 1))
+  Downloading flask-3.0.0-py3-none-any.whl.metadata (3.6 kB)
+Collecting Flask-CORS==4.0.0 (from -r requirements.txt (line 2))
+  Downloading Flask_Cors-4.0.0-py2.py3-none-any.whl.metadata (5.4 kB)
+Collecting Flask-JWT-Extended==4.6.0 (from -r requirements.txt (line 3))
+  Downloading Flask_JWT_Extended-4.6.0-py2.py3-none-any.whl.metadata (3.9 kB)
+Collecting PyMySQL==1.1.0 (from -r requirements.txt (line 4))
+  Downloading PyMySQL-1.1.0-py3-none-any.whl.metadata (4.4 kB)
+Collecting python-dotenv==1.0.0 (from -r requirements.txt (line 5))
+  Downloading python_dotenv-1.0.0-py3-none-any.whl.metadata (21 kB)
+Collecting Werkzeug==3.0.1 (from -r requirements.txt (line 6))
+  Downloading werkzeug-3.0.1-py3-none-any.whl.metadata (4.1 kB)
+Collecting gunicorn==21.2.0 (from -r requirements.txt (line 7))
+  Downloading gunicorn-21.2.0-py3-none-any.whl.metadata (4.1 kB)
+Collecting pdfplumber==0.10.3 (from -r requirements.txt (line 8))
+  Downloading pdfplumber-0.10.3-py3-none-any.whl.metadata (38 kB)
+Collecting Pillow==10.2.0 (from -r requirements.txt (line 9))
+  Downloading pillow-10.2.0-cp311-cp311-manylinux_2_28_x86_64.whl.metadata (9.7 kB)
+Collecting paddlepaddle==3.0.0 (from -r requirements.txt (line 10))
+  Downloading paddlepaddle-3.0.0-cp311-cp311-manylinux1_x86_64.whl.metadata (8.9 kB)
+Collecting paddleocr==2.9.1 (from -r requirements.txt (line 11))
+  Downloading paddleocr-2.9.1-py3-none-any.whl.metadata (8.5 kB)
+Collecting pdf2image==1.17.0 (from -r requirements.txt (line 12))
+  Downloading pdf2image-1.17.0-py3-none-any.whl.metadata (6.2 kB)
+Collecting numpy<2 (from -r requirements.txt (line 13))
+  Downloading numpy-1.26.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (61 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 61.0/61.0 kB 148.8 kB/s eta 0:00:00
+Collecting Jinja2>=3.1.2 (from Flask==3.0.0->-r requirements.txt (line 1))
+  Downloading jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+Collecting itsdangerous>=2.1.2 (from Flask==3.0.0->-r requirements.txt (line 1))
+  Downloading itsdangerous-2.2.0-py3-none-any.whl.metadata (1.9 kB)
+Collecting click>=8.1.3 (from Flask==3.0.0->-r requirements.txt (line 1))
+  Downloading click-8.3.2-py3-none-any.whl.metadata (2.6 kB)
+Collecting blinker>=1.6.2 (from Flask==3.0.0->-r requirements.txt (line 1))
+  Downloading blinker-1.9.0-py3-none-any.whl.metadata (1.6 kB)
+Collecting PyJWT<3.0,>=2.0 (from Flask-JWT-Extended==4.6.0->-r requirements.txt (line 3))
+  Downloading pyjwt-2.12.1-py3-none-any.whl.metadata (4.1 kB)
+Collecting MarkupSafe>=2.1.1 (from Werkzeug==3.0.1->-r requirements.txt (line 6))
+  Downloading markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.7 kB)
+Collecting packaging (from gunicorn==21.2.0->-r requirements.txt (line 7))
+  Downloading packaging-26.1-py3-none-any.whl.metadata (3.5 kB)
+Collecting pdfminer.six==20221105 (from pdfplumber==0.10.3->-r requirements.txt (line 8))
+  Downloading pdfminer.six-20221105-py3-none-any.whl.metadata (4.0 kB)
+Collecting pypdfium2>=4.18.0 (from pdfplumber==0.10.3->-r requirements.txt (line 8))
+  Downloading pypdfium2-5.7.1-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (68 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 68.2/68.2 kB 169.3 kB/s eta 0:00:00
+Collecting httpx (from paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+Collecting protobuf>=3.20.2 (from paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading protobuf-7.34.1-cp310-abi3-manylinux2014_x86_64.whl.metadata (595 bytes)
+Collecting decorator (from paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading decorator-5.2.1-py3-none-any.whl.metadata (3.9 kB)
+Collecting astor (from paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading astor-0.8.1-py2.py3-none-any.whl.metadata (4.2 kB)
+Collecting opt_einsum==3.3.0 (from paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading opt_einsum-3.3.0-py3-none-any.whl.metadata (6.5 kB)
+Collecting networkx (from paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading networkx-3.6.1-py3-none-any.whl.metadata (6.8 kB)
+Collecting typing_extensions (from paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading typing_extensions-4.15.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting shapely (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading shapely-2.1.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (6.8 kB)
+Collecting scikit-image (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading scikit_image-0.26.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (15 kB)
+Collecting imgaug (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading imgaug-0.4.0-py2.py3-none-any.whl.metadata (1.8 kB)
+Collecting pyclipper (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading pyclipper-1.4.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (8.6 kB)
+Collecting lmdb (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading lmdb-2.2.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (1.2 kB)
+Collecting tqdm (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading tqdm-4.67.3-py3-none-any.whl.metadata (57 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 57.7/57.7 kB 137.7 kB/s eta 0:00:00
+Collecting rapidfuzz (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading rapidfuzz-3.14.5-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (12 kB)
+Collecting opencv-python (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading opencv_python-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (19 kB)
+Collecting opencv-contrib-python (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading opencv_contrib_python-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (19 kB)
+Collecting cython (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading cython-3.2.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (7.5 kB)
+Collecting pyyaml (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+Collecting python-docx (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading python_docx-1.2.0-py3-none-any.whl.metadata (2.0 kB)
+Collecting beautifulsoup4 (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading beautifulsoup4-4.14.3-py3-none-any.whl.metadata (3.8 kB)
+Collecting fonttools>=4.24.0 (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading fonttools-4.62.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (117 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 117.5/117.5 kB 208.1 kB/s eta 0:00:00
+Collecting fire>=0.3.0 (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading fire-0.7.1-py3-none-any.whl.metadata (5.8 kB)
+Collecting requests (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading requests-2.33.1-py3-none-any.whl.metadata (4.8 kB)
+Collecting albumentations==1.4.10 (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading albumentations-1.4.10-py3-none-any.whl.metadata (38 kB)
+Collecting albucore==0.0.13 (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading albucore-0.0.13-py3-none-any.whl.metadata (3.1 kB)
+Collecting tomli>=2.0.1 (from albucore==0.0.13->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading tomli-2.4.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (10 kB)
+Collecting opencv-python-headless>=4.9.0.80 (from albucore==0.0.13->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading opencv_python_headless-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (19 kB)
+Collecting scipy>=1.10.0 (from albumentations==1.4.10->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading scipy-1.17.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 62.1/62.1 kB 308.2 kB/s eta 0:00:00
+Collecting scikit-learn>=1.3.2 (from albumentations==1.4.10->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading scikit_learn-1.8.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (11 kB)
+Collecting pydantic>=2.7.0 (from albumentations==1.4.10->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading pydantic-2.13.3-py3-none-any.whl.metadata (108 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 108.8/108.8 kB 190.4 kB/s eta 0:00:00
+Collecting charset-normalizer>=2.0.0 (from pdfminer.six==20221105->pdfplumber==0.10.3->-r requirements.txt (line 8))
+  Downloading charset_normalizer-3.4.7-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40.9/40.9 kB 180.5 kB/s eta 0:00:00
+Collecting cryptography>=36.0.0 (from pdfminer.six==20221105->pdfplumber==0.10.3->-r requirements.txt (line 8))
+  Downloading cryptography-46.0.7-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (5.7 kB)
+Collecting termcolor (from fire>=0.3.0->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading termcolor-3.3.0-py3-none-any.whl.metadata (6.5 kB)
+Collecting imageio!=2.35.0,>=2.33 (from scikit-image->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading imageio-2.37.3-py3-none-any.whl.metadata (9.7 kB)
+Collecting tifffile>=2022.8.12 (from scikit-image->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading tifffile-2026.3.3-py3-none-any.whl.metadata (31 kB)
+Collecting lazy-loader>=0.4 (from scikit-image->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading lazy_loader-0.5-py3-none-any.whl.metadata (5.9 kB)
+Collecting soupsieve>=1.6.1 (from beautifulsoup4->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading soupsieve-2.8.3-py3-none-any.whl.metadata (4.6 kB)
+Collecting anyio (from httpx->paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading anyio-4.13.0-py3-none-any.whl.metadata (4.5 kB)
+Collecting certifi (from httpx->paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading certifi-2026.2.25-py3-none-any.whl.metadata (2.5 kB)
+Collecting httpcore==1.* (from httpx->paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+Collecting idna (from httpx->paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading idna-3.12-py3-none-any.whl.metadata (8.0 kB)
+Collecting h11>=0.16 (from httpcore==1.*->httpx->paddlepaddle==3.0.0->-r requirements.txt (line 10))
+  Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+Collecting six (from imgaug->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+Collecting matplotlib (from imgaug->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading matplotlib-3.10.8-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (52 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 52.8/52.8 kB 249.1 kB/s eta 0:00:00
+INFO: pip is looking at multiple versions of opencv-contrib-python to determine which version is compatible with other requirements. This could take a while.
+Collecting opencv-contrib-python (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading opencv_contrib_python-4.13.0.90-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (19 kB)
+  Downloading opencv_contrib_python-4.12.0.88-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (19 kB)
+  Downloading opencv_contrib_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (20 kB)
+INFO: pip is looking at multiple versions of opencv-python to determine which version is compatible with other requirements. This could take a while.
+Collecting opencv-python (from paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading opencv_python-4.13.0.90-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (19 kB)
+  Downloading opencv_python-4.12.0.88-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (19 kB)
+  Downloading opencv_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (20 kB)
+Collecting lxml>=3.1.0 (from python-docx->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading lxml-6.1.0-cp311-cp311-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (4.0 kB)
+Collecting urllib3<3,>=1.26 (from requests->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading urllib3-2.6.3-py3-none-any.whl.metadata (6.9 kB)
+Collecting cffi>=2.0.0 (from cryptography>=36.0.0->pdfminer.six==20221105->pdfplumber==0.10.3->-r requirements.txt (line 8))
+  Downloading cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.6 kB)
+INFO: pip is looking at multiple versions of opencv-python-headless to determine which version is compatible with other requirements. This could take a while.
+Collecting opencv-python-headless>=4.9.0.80 (from albucore==0.0.13->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading opencv_python_headless-4.13.0.90-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (19 kB)
+  Downloading opencv_python_headless-4.12.0.88-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (19 kB)
+  Downloading opencv_python_headless-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (20 kB)
+Collecting annotated-types>=0.6.0 (from pydantic>=2.7.0->albumentations==1.4.10->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+Collecting pydantic-core==2.46.3 (from pydantic>=2.7.0->albumentations==1.4.10->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading pydantic_core-2.46.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+Collecting typing-inspection>=0.4.2 (from pydantic>=2.7.0->albumentations==1.4.10->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading typing_inspection-0.4.2-py3-none-any.whl.metadata (2.6 kB)
+Collecting joblib>=1.3.0 (from scikit-learn>=1.3.2->albumentations==1.4.10->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading joblib-1.5.3-py3-none-any.whl.metadata (5.5 kB)
+Collecting threadpoolctl>=3.2.0 (from scikit-learn>=1.3.2->albumentations==1.4.10->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading threadpoolctl-3.6.0-py3-none-any.whl.metadata (13 kB)
+Collecting contourpy>=1.0.1 (from matplotlib->imgaug->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading contourpy-1.3.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (5.5 kB)
+Collecting cycler>=0.10 (from matplotlib->imgaug->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading cycler-0.12.1-py3-none-any.whl.metadata (3.8 kB)
+Collecting kiwisolver>=1.3.1 (from matplotlib->imgaug->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading kiwisolver-1.5.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.1 kB)
+Collecting pyparsing>=3 (from matplotlib->imgaug->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading pyparsing-3.3.2-py3-none-any.whl.metadata (5.8 kB)
+Collecting python-dateutil>=2.7 (from matplotlib->imgaug->paddleocr==2.9.1->-r requirements.txt (line 11))
+  Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+Collecting pycparser (from cffi>=2.0.0->cryptography>=36.0.0->pdfminer.six==20221105->pdfplumber==0.10.3->-r requirements.txt (line 8))
+  Downloading pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
+Downloading flask-3.0.0-py3-none-any.whl (99 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 99.7/99.7 kB 258.2 kB/s eta 0:00:00
+Downloading Flask_Cors-4.0.0-py2.py3-none-any.whl (14 kB)
+Downloading Flask_JWT_Extended-4.6.0-py2.py3-none-any.whl (22 kB)
+Downloading PyMySQL-1.1.0-py3-none-any.whl (44 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 44.8/44.8 kB 205.7 kB/s eta 0:00:00
+Downloading python_dotenv-1.0.0-py3-none-any.whl (19 kB)
+Downloading werkzeug-3.0.1-py3-none-any.whl (226 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 226.7/226.7 kB 250.7 kB/s eta 0:00:00
+Downloading gunicorn-21.2.0-py3-none-any.whl (80 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 80.2/80.2 kB 408.0 kB/s eta 0:00:00
+Downloading pdfplumber-0.10.3-py3-none-any.whl (48 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 49.0/49.0 kB 223.7 kB/s eta 0:00:00
+Downloading pillow-10.2.0-cp311-cp311-manylinux_2_28_x86_64.whl (4.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 297.6 kB/s eta 0:00:00
+Downloading paddlepaddle-3.0.0-cp311-cp311-manylinux1_x86_64.whl (192.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 192.8/192.8 MB 1.5 MB/s eta 0:00:00
+Downloading paddleocr-2.9.1-py3-none-any.whl (544 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 544.7/544.7 kB 1.5 MB/s eta 0:00:00
+Downloading pdf2image-1.17.0-py3-none-any.whl (11 kB)
+Downloading albucore-0.0.13-py3-none-any.whl (8.5 kB)
+Downloading albumentations-1.4.10-py3-none-any.whl (161 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 161.9/161.9 kB 258.5 MB/s eta 0:00:00
+Downloading opt_einsum-3.3.0-py3-none-any.whl (65 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 65.5/65.5 kB 253.3 MB/s eta 0:00:00
+Downloading pdfminer.six-20221105-py3-none-any.whl (5.6 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.6/5.6 MB 1.5 MB/s eta 0:00:00
+Downloading numpy-1.26.4-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (18.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 18.3/18.3 MB 1.5 MB/s eta 0:00:00
+Downloading blinker-1.9.0-py3-none-any.whl (8.5 kB)
+Downloading click-8.3.2-py3-none-any.whl (108 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 108.4/108.4 kB 349.2 MB/s eta 0:00:00
+Downloading fire-0.7.1-py3-none-any.whl (115 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 115.9/115.9 kB 314.2 MB/s eta 0:00:00
+Downloading fonttools-4.62.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.1/5.1 MB 1.5 MB/s eta 0:00:00
+Downloading itsdangerous-2.2.0-py3-none-any.whl (16 kB)
+Downloading jinja2-3.1.6-py3-none-any.whl (134 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 134.9/134.9 kB 107.8 MB/s eta 0:00:00
+Downloading markupsafe-3.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (22 kB)
+Downloading protobuf-7.34.1-cp310-abi3-manylinux2014_x86_64.whl (324 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 324.3/324.3 kB 1.8 MB/s eta 0:00:00
+Downloading pyjwt-2.12.1-py3-none-any.whl (29 kB)
+Downloading pypdfium2-5.7.1-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.7/3.7 MB 1.6 MB/s eta 0:00:00
+Downloading scikit_image-0.26.0-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (13.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 13.7/13.7 MB 1.5 MB/s eta 0:00:00
+Downloading networkx-3.6.1-py3-none-any.whl (2.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 1.7 MB/s eta 0:00:00
+Downloading packaging-26.1-py3-none-any.whl (95 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 95.8/95.8 kB 102.1 MB/s eta 0:00:00
+Downloading typing_extensions-4.15.0-py3-none-any.whl (44 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 44.6/44.6 kB 134.9 MB/s eta 0:00:00
+Downloading astor-0.8.1-py2.py3-none-any.whl (27 kB)
+Downloading beautifulsoup4-4.14.3-py3-none-any.whl (107 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 107.7/107.7 kB 304.2 MB/s eta 0:00:00
+Downloading cython-3.2.4-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (3.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 1.6 MB/s eta 0:00:00
+Downloading decorator-5.2.1-py3-none-any.whl (9.2 kB)
+Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 73.5/73.5 kB 296.5 MB/s eta 0:00:00
+Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 78.8/78.8 kB 249.4 MB/s eta 0:00:00
+Downloading imgaug-0.4.0-py2.py3-none-any.whl (948 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 948.0/948.0 kB 1.8 MB/s eta 0:00:00
+Downloading lmdb-2.2.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (324 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 324.2/324.2 kB 1.9 MB/s eta 0:00:00
+Downloading opencv_contrib_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (69.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 69.1/69.1 MB 1.5 MB/s eta 0:00:00
+Downloading opencv_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (63.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 63.0/63.0 MB 1.5 MB/s eta 0:00:00
+Downloading pyclipper-1.4.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (989 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 989.6/989.6 kB 1.9 MB/s eta 0:00:00
+Downloading python_docx-1.2.0-py3-none-any.whl (252 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 253.0/253.0 kB 346.9 MB/s eta 0:00:00
+Downloading pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (806 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 806.6/806.6 kB 1.5 MB/s eta 0:00:00
+Downloading rapidfuzz-3.14.5-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (3.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.2/3.2 MB 1.5 MB/s eta 0:00:00
+Downloading requests-2.33.1-py3-none-any.whl (64 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 64.9/64.9 kB 261.4 MB/s eta 0:00:00
+Downloading shapely-2.1.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (3.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.1/3.1 MB 1.6 MB/s eta 0:00:00
+Downloading tqdm-4.67.3-py3-none-any.whl (78 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 78.4/78.4 kB 334.3 MB/s eta 0:00:00
+Downloading certifi-2026.2.25-py3-none-any.whl (153 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 153.7/153.7 kB 299.8 MB/s eta 0:00:00
+Downloading charset_normalizer-3.4.7-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (214 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 214.1/214.1 kB 264.2 MB/s eta 0:00:00
+Downloading cryptography-46.0.7-cp311-abi3-manylinux_2_34_x86_64.whl (4.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 1.5 MB/s eta 0:00:00
+Downloading idna-3.12-py3-none-any.whl (68 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 68.6/68.6 kB 196.0 MB/s eta 0:00:00
+Downloading imageio-2.37.3-py3-none-any.whl (317 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 317.6/317.6 kB 1.8 MB/s eta 0:00:00
+Downloading lazy_loader-0.5-py3-none-any.whl (8.0 kB)
+Downloading lxml-6.1.0-cp311-cp311-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (5.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.2/5.2 MB 1.6 MB/s eta 0:00:00
+Downloading opencv_python_headless-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (50.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 50.0/50.0 MB 1.5 MB/s eta 0:00:00
+Downloading pydantic-2.13.3-py3-none-any.whl (471 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 472.0/472.0 kB 2.7 MB/s eta 0:00:00
+Downloading pydantic_core-2.46.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 1.7 MB/s eta 0:00:00
+Downloading scikit_learn-1.8.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (9.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.1/9.1 MB 1.5 MB/s eta 0:00:00
+Downloading scipy-1.17.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 35.3/35.3 MB 1.5 MB/s eta 0:00:00
+Downloading soupsieve-2.8.3-py3-none-any.whl (37 kB)
+Downloading tifffile-2026.3.3-py3-none-any.whl (243 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 244.0/244.0 kB 324.8 MB/s eta 0:00:00
+Downloading tomli-2.4.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (243 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 243.8/243.8 kB 371.3 MB/s eta 0:00:00
+Downloading urllib3-2.6.3-py3-none-any.whl (131 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 131.6/131.6 kB 365.0 MB/s eta 0:00:00
+Downloading anyio-4.13.0-py3-none-any.whl (114 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 114.4/114.4 kB 337.8 MB/s eta 0:00:00
+Downloading matplotlib-3.10.8-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (8.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 8.7/8.7 MB 1.5 MB/s eta 0:00:00
+Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+Downloading termcolor-3.3.0-py3-none-any.whl (7.7 kB)
+Downloading annotated_types-0.7.0-py3-none-any.whl (13 kB)
+Downloading cffi-2.0.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (215 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 215.6/215.6 kB 339.4 MB/s eta 0:00:00
+Downloading contourpy-1.3.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (355 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 355.2/355.2 kB 2.0 MB/s eta 0:00:00
+Downloading cycler-0.12.1-py3-none-any.whl (8.3 kB)
+Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+Downloading joblib-1.5.3-py3-none-any.whl (309 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 309.1/309.1 kB 1.8 MB/s eta 0:00:00
+Downloading kiwisolver-1.5.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.4/1.4 MB 1.6 MB/s eta 0:00:00
+Downloading pyparsing-3.3.2-py3-none-any.whl (122 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 122.8/122.8 kB 323.2 MB/s eta 0:00:00
+Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 229.9/229.9 kB 358.9 MB/s eta 0:00:00
+Downloading threadpoolctl-3.6.0-py3-none-any.whl (18 kB)
+Downloading typing_inspection-0.4.2-py3-none-any.whl (14 kB)
+Downloading pycparser-3.0-py3-none-any.whl (48 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 48.2/48.2 kB 81.4 MB/s eta 0:00:00
+Installing collected packages: urllib3, typing_extensions, tqdm, tomli, threadpoolctl, termcolor, soupsieve, six, rapidfuzz, pyyaml, python-dotenv, pypdfium2, pyparsing, PyMySQL, PyJWT, pycparser, pyclipper, protobuf, Pillow, packaging, numpy, networkx, MarkupSafe, lxml, lmdb, kiwisolver, joblib, itsdangerous, idna, h11, fonttools, decorator, cython, cycler, click, charset-normalizer, certifi, blinker, astor, annotated-types, Werkzeug, typing-inspection, tifffile, shapely, scipy, requests, python-docx, python-dateutil, pydantic-core, pdf2image, opt_einsum, opencv-python-headless, opencv-python, opencv-contrib-python, lazy-loader, Jinja2, imageio, httpcore, gunicorn, fire, contourpy, cffi, beautifulsoup4, anyio, scikit-learn, scikit-image, pydantic, matplotlib, httpx, Flask, cryptography, albucore, pdfminer.six, paddlepaddle, imgaug, Flask-JWT-Extended, Flask-CORS, albumentations, pdfplumber, paddleocr
+Successfully installed Flask-3.0.0 Flask-CORS-4.0.0 Flask-JWT-Extended-4.6.0 Jinja2-3.1.6 MarkupSafe-3.0.3 Pillow-10.2.0 PyJWT-2.12.1 PyMySQL-1.1.0 Werkzeug-3.0.1 albucore-0.0.13 albumentations-1.4.10 annotated-types-0.7.0 anyio-4.13.0 astor-0.8.1 beautifulsoup4-4.14.3 blinker-1.9.0 certifi-2026.2.25 cffi-2.0.0 charset-normalizer-3.4.7 click-8.3.2 contourpy-1.3.3 cryptography-46.0.7 cycler-0.12.1 cython-3.2.4 decorator-5.2.1 fire-0.7.1 fonttools-4.62.1 gunicorn-21.2.0 h11-0.16.0 httpcore-1.0.9 httpx-0.28.1 idna-3.12 imageio-2.37.3 imgaug-0.4.0 itsdangerous-2.2.0 joblib-1.5.3 kiwisolver-1.5.0 lazy-loader-0.5 lmdb-2.2.0 lxml-6.1.0 matplotlib-3.10.8 networkx-3.6.1 numpy-1.26.4 opencv-contrib-python-4.11.0.86 opencv-python-4.11.0.86 opencv-python-headless-4.11.0.86 opt_einsum-3.3.0 packaging-26.1 paddleocr-2.9.1 paddlepaddle-3.0.0 pdf2image-1.17.0 pdfminer.six-20221105 pdfplumber-0.10.3 protobuf-7.34.1 pyclipper-1.4.0 pycparser-3.0 pydantic-2.13.3 pydantic-core-2.46.3 pyparsing-3.3.2 pypdfium2-5.7.1 python-dateutil-2.9.0.post0 python-docx-1.2.0 python-dotenv-1.0.0 pyyaml-6.0.3 rapidfuzz-3.14.5 requests-2.33.1 scikit-image-0.26.0 scikit-learn-1.8.0 scipy-1.17.1 shapely-2.1.2 six-1.17.0 soupsieve-2.8.3 termcolor-3.3.0 threadpoolctl-3.6.0 tifffile-2026.3.3 tomli-2.4.1 tqdm-4.67.3 typing-inspection-0.4.2 typing_extensions-4.15.0 urllib3-2.6.3
+[91mWARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+[0m[91m
+[notice] A new release of pip is available: 24.0 -> 26.0.1
+[notice] To update, run: pip install --upgrade pip
+[0mRemoving intermediate container ab0f820786bd
+ ---> ebd0749a80bf
+Step 6/10 : RUN python -c "from paddleocr import PaddleOCR; ocr = PaddleOCR(use_angle_cls=True, lang='en', show_log=False); print('PaddleOCR models downloaded successfully')"
+ ---> Running in eb35dd235f2a
+[91m/usr/local/lib/python3.11/site-packages/paddle/utils/cpp_extension/extension_utils.py:711: UserWarning: No ccache found. Please be aware that recompiling all source files may be required. You can download and install ccache from: https://github.com/ccache/ccache/blob/master/doc/INSTALL.md
+  warnings.warn(warning_message)
+[0m[91m  0%|          | 0/3910 [00:00<?, ?it/s][0mdownload https://paddleocr.bj.bcebos.com/PP-OCRv3/english/en_PP-OCRv3_det_infer.tar to /root/.paddleocr/whl/det/en/en_PP-OCRv3_det_infer/en_PP-OCRv3_det_infer.tar
+[91m  0%|          | 3/3910 [00:00<04:02, 16.14it/s][0m[91m  0%|          | 19/3910 [00:00<01:13, 52.85it/s][0m[91m  1%|          | 35/3910 [00:00<01:25, 45.52it/s][0m[91m  2%|▏         | 67/3910 [00:01<01:02, 61.24it/s][0m[91m  2%|▏         | 83/3910 [00:01<00:56, 67.32it/s][0m[91m  3%|▎         | 99/3910 [00:01<00:54, 69.97it/s][0m[91m  3%|▎         | 115/3910 [00:01<01:05, 57.98it/s][0m[91m  3%|▎         | 131/3910 [00:02<01:16, 49.26it/s][0m[91m  4%|▍         | 147/3910 [00:02<01:21, 46.20it/s][0m[91m  4%|▍         | 163/3910 [00:03<01:33, 40.23it/s][0m[91m  5%|▍         | 179/3910 [00:03<01:39, 37.55it/s][0m[91m  5%|▍         | 195/3910 [00:04<02:07, 29.04it/s][0m[91m  5%|▌         | 211/3910 [00:05<02:01, 30.41it/s][0m[91m  6%|▌         | 227/3910 [00:05<02:11, 28.04it/s][0m[91m  6%|▌         | 243/3910 [00:06<02:03, 29.60it/s][0m[91m  7%|▋         | 259/3910 [00:07<02:23, 25.47it/s][0m[91m  7%|▋         | 275/3910 [00:08<02:55, 20.73it/s][0m[91m  7%|▋         | 291/3910 [00:09<03:04, 19.64it/s][0m[91m  8%|▊         | 307/3910 [00:09<03:02, 19.73it/s][0m[91m  8%|▊         | 323/3910 [00:10<02:54, 20.58it/s][0m[91m  9%|▊         | 339/3910 [00:11<02:38, 22.59it/s][0m[91m  9%|▉         | 355/3910 [00:11<02:26, 24.25it/s][0m[91m  9%|▉         | 371/3910 [00:12<02:18, 25.57it/s][0m[91m 10%|▉         | 387/3910 [00:12<02:12, 26.57it/s][0m[91m 10%|█         | 403/3910 [00:13<02:07, 27.59it/s][0m[91m 11%|█         | 419/3910 [00:13<01:56, 29.90it/s][0m[91m 11%|█         | 435/3910 [00:14<01:54, 30.31it/s][0m[91m 12%|█▏        | 451/3910 [00:14<01:50, 31.28it/s][0m[91m 12%|█▏        | 467/3910 [00:15<01:45, 32.65it/s][0m[91m 12%|█▏        | 483/3910 [00:15<01:41, 33.68it/s][0m[91m 13%|█▎        | 499/3910 [00:16<01:39, 34.44it/s][0m[91m 13%|█▎        | 515/3910 [00:16<01:37, 34.99it/s][0m[91m 14%|█▎        | 531/3910 [00:16<01:35, 35.37it/s][0m[91m 14%|█▍        | 547/3910 [00:17<01:33, 35.84it/s][0m[91m 14%|█▍        | 563/3910 [00:17<01:28, 37.75it/s][0m[91m 15%|█▍        | 579/3910 [00:18<01:30, 36.93it/s][0m[91m 15%|█▌        | 595/3910 [00:18<01:25, 38.68it/s][0m[91m 16%|█▌        | 611/3910 [00:19<01:46, 30.85it/s][0m[91m 16%|█▌        | 627/3910 [00:19<01:37, 33.80it/s][0m[91m 16%|█▋        | 643/3910 [00:20<01:30, 36.22it/s][0m[91m 17%|█▋        | 659/3910 [00:20<01:25, 38.14it/s][0m[91m 17%|█▋        | 675/3910 [00:20<01:21, 39.61it/s][0m[91m 18%|█▊        | 691/3910 [00:21<01:20, 39.78it/s][0m[91m 18%|█▊        | 707/3910 [00:21<01:18, 40.81it/s][0m[91m 18%|█▊        | 723/3910 [00:21<01:16, 41.60it/s][0m[91m 19%|█▉        | 739/3910 [00:22<01:15, 42.15it/s][0m[91m 19%|█▉        | 755/3910 [00:22<01:12, 43.62it/s][0m[91m 20%|█▉        | 771/3910 [00:23<01:12, 43.29it/s][0m[91m 20%|██        | 787/3910 [00:23<01:11, 43.74it/s][0m[91m 21%|██        | 803/3910 [00:23<01:08, 45.63it/s][0m[91m 21%|██        | 819/3910 [00:24<01:05, 47.06it/s][0m[91m 21%|██▏       | 835/3910 [00:24<01:03, 48.10it/s][0m[91m 22%|██▏       | 851/3910 [00:24<01:02, 48.88it/s][0m[91m 22%|██▏       | 867/3910 [00:24<01:01, 49.42it/s][0m[91m 23%|██▎       | 883/3910 [00:25<01:00, 49.80it/s][0m[91m 23%|██▎       | 899/3910 [00:25<01:00, 50.09it/s][0m[91m 23%|██▎       | 915/3910 [00:25<00:58, 51.28it/s][0m[91m 24%|██▍       | 931/3910 [00:26<00:54, 54.41it/s][0m[91m 24%|██▍       | 947/3910 [00:26<00:59, 49.45it/s][0m[91m 25%|██▍       | 963/3910 [00:26<00:56, 52.46it/s][0m[91m 25%|██▌       | 979/3910 [00:27<00:53, 54.80it/s][0m[91m 25%|██▌       | 995/3910 [00:27<00:51, 56.56it/s][0m[91m 26%|██▌       | 1011/3910 [00:27<00:50, 57.86it/s][0m[91m 26%|██▋       | 1027/3910 [00:27<00:49, 58.78it/s][0m[91m 27%|██▋       | 1043/3910 [00:28<00:48, 59.49it/s][0m[91m 27%|██▋       | 1059/3910 [00:28<00:47, 59.98it/s][0m[91m 27%|██▋       | 1075/3910 [00:28<00:47, 60.31it/s][0m[91m 28%|██▊       | 1090/3910 [00:28<00:47, 59.42it/s][0m[91m 28%|██▊       | 1106/3910 [00:29<00:46, 60.54it/s][0m[91m 29%|██▊       | 1122/3910 [00:29<00:43, 64.59it/s][0m[91m 29%|██▉       | 1138/3910 [00:29<00:53, 51.57it/s][0m[91m 30%|██▉       | 1154/3910 [00:30<01:00, 45.40it/s][0m[91m 30%|██▉       | 1170/3910 [00:30<00:53, 50.89it/s][0m[91m 30%|███       | 1186/3910 [00:30<00:48, 55.60it/s][0m[91m 31%|███       | 1202/3910 [00:30<00:45, 59.45it/s][0m[91m 31%|███       | 1218/3910 [00:31<00:43, 62.46it/s][0m[91m 32%|███▏      | 1234/3910 [00:31<00:41, 64.76it/s][0m[91m 32%|███▏      | 1250/3910 [00:31<00:40, 66.48it/s][0m[91m 32%|███▏      | 1266/3910 [00:31<00:39, 67.71it/s][0m[91m 33%|███▎      | 1282/3910 [00:32<00:38, 68.60it/s][0m[91m 33%|███▎      | 1298/3910 [00:32<00:37, 69.26it/s][0m[91m 34%|███▎      | 1314/3910 [00:32<00:38, 68.02it/s][0m[91m 34%|███▍      | 1330/3910 [00:32<00:37, 68.85it/s][0m[91m 34%|███▍      | 1346/3910 [00:32<00:36, 69.44it/s][0m[91m 35%|███▍      | 1362/3910 [00:33<00:36, 69.84it/s][0m[91m 35%|███▌      | 1378/3910 [00:33<00:35, 71.20it/s][0m[91m 36%|███▌      | 1394/3910 [00:33<00:33, 75.64it/s][0m[91m 36%|███▌      | 1410/3910 [00:33<00:33, 74.62it/s][0m[91m 36%|███▋      | 1426/3910 [00:34<00:35, 70.94it/s][0m[91m 37%|███▋      | 1442/3910 [00:34<00:33, 74.43it/s][0m[91m 37%|███▋      | 1458/3910 [00:34<00:31, 77.15it/s][0m[91m 38%|███▊      | 1474/3910 [00:34<00:30, 79.24it/s][0m[91m 38%|███▊      | 1490/3910 [00:34<00:29, 80.77it/s][0m[91m 39%|███▊      | 1506/3910 [00:35<00:29, 81.85it/s][0m[91m 39%|███▉      | 1522/3910 [00:35<00:28, 82.61it/s][0m[91m 39%|███▉      | 1538/3910 [00:35<00:28, 83.18it/s][0m[91m 40%|███▉      | 1554/3910 [00:35<00:28, 83.58it/s][0m[91m 40%|████      | 1570/3910 [00:35<00:28, 81.80it/s][0m[91m 41%|████      | 1586/3910 [00:35<00:28, 82.62it/s][0m[91m 41%|████      | 1602/3910 [00:36<00:27, 83.07it/s][0m[91m 41%|████▏     | 1618/3910 [00:36<00:27, 83.59it/s][0m[91m 42%|████▏     | 1634/3910 [00:36<00:27, 83.88it/s][0m[91m 42%|████▏     | 1650/3910 [00:36<00:25, 87.51it/s][0m[91m 43%|████▎     | 1666/3910 [00:36<00:24, 92.31it/s][0m[91m 43%|████▎     | 1682/3910 [00:37<00:23, 93.11it/s][0m[91m 43%|████▎     | 1698/3910 [00:37<00:26, 84.00it/s][0m[91m 44%|████▍     | 1714/3910 [00:37<00:25, 87.46it/s][0m[91m 44%|████▍     | 1730/3910 [00:37<00:23, 91.48it/s][0m[91m 45%|████▍     | 1746/3910 [00:37<00:22, 94.43it/s][0m[91m 45%|████▌     | 1762/3910 [00:37<00:22, 96.74it/s][0m[91m 45%|████▌     | 1778/3910 [00:38<00:21, 98.37it/s][0m[91m 46%|████▌     | 1794/3910 [00:38<00:21, 99.38it/s][0m[91m 46%|████▋     | 1810/3910 [00:38<00:20, 100.51it/s][0m[91m 47%|████▋     | 1826/3910 [00:38<00:21, 98.89it/s] [0m[91m 47%|████▋     | 1842/3910 [00:38<00:20, 100.07it/s][0m[91m 48%|████▊     | 1858/3910 [00:38<00:20, 100.90it/s][0m[91m 48%|████▊     | 1874/3910 [00:39<00:20, 101.53it/s][0m[91m 48%|████▊     | 1890/3910 [00:39<00:19, 101.92it/s][0m[91m 49%|████▊     | 1906/3910 [00:39<00:19, 102.27it/s][0m[91m 49%|████▉     | 1922/3910 [00:39<00:19, 102.45it/s][0m[91m 50%|████▉     | 1938/3910 [00:39<00:19, 102.60it/s][0m[91m 50%|████▉     | 1954/3910 [00:39<00:19, 102.76it/s][0m[91m 50%|█████     | 1970/3910 [00:39<00:18, 102.83it/s][0m[91m 51%|█████     | 1986/3910 [00:40<00:18, 106.05it/s][0m[91m 51%|█████     | 2002/3910 [00:40<00:17, 112.01it/s][0m[91m 52%|█████▏    | 2018/3910 [00:40<00:25, 73.21it/s] [0m[91m 52%|█████▏    | 2034/3910 [00:40<00:30, 60.90it/s][0m[91m 52%|█████▏    | 2050/3910 [00:41<00:26, 70.87it/s][0m[91m 53%|█████▎    | 2066/3910 [00:41<00:23, 80.01it/s][0m[91m 53%|█████▎    | 2082/3910 [00:41<00:21, 86.36it/s][0m[91m 54%|█████▎    | 2098/3910 [00:41<00:19, 93.28it/s][0m[91m 54%|█████▍    | 2114/3910 [00:41<00:18, 98.87it/s][0m[91m 54%|█████▍    | 2130/3910 [00:41<00:17, 103.11it/s][0m[91m 55%|█████▍    | 2146/3910 [00:41<00:16, 106.33it/s][0m[91m 55%|█████▌    | 2162/3910 [00:42<00:16, 108.75it/s][0m[91m 56%|█████▌    | 2178/3910 [00:42<00:15, 110.65it/s][0m[91m 56%|█████▌    | 2194/3910 [00:42<00:15, 111.98it/s][0m[91m 57%|█████▋    | 2210/3910 [00:42<00:15, 112.93it/s][0m[91m 57%|█████▋    | 2226/3910 [00:42<00:14, 113.57it/s][0m[91m 57%|█████▋    | 2242/3910 [00:42<00:14, 114.00it/s][0m[91m 58%|█████▊    | 2258/3910 [00:42<00:14, 114.47it/s][0m[91m 58%|█████▊    | 2274/3910 [00:43<00:14, 114.66it/s][0m[91m 59%|█████▊    | 2290/3910 [00:43<00:14, 114.75it/s][0m[91m 59%|█████▉    | 2306/3910 [00:43<00:13, 114.91it/s][0m[91m 59%|█████▉    | 2322/3910 [00:43<00:13, 115.00it/s][0m[91m 60%|█████▉    | 2338/3910 [00:43<00:14, 112.25it/s][0m[91m 60%|██████    | 2354/3910 [00:43<00:13, 113.14it/s][0m[91m 61%|██████    | 2370/3910 [00:43<00:13, 113.78it/s][0m[91m 61%|██████    | 2386/3910 [00:44<00:12, 117.68it/s][0m[91m 61%|██████▏   | 2402/3910 [00:44<00:12, 124.47it/s][0m[91m 62%|██████▏   | 2418/3910 [00:44<00:11, 129.77it/s][0m[91m 62%|██████▏   | 2434/3910 [00:44<00:11, 125.85it/s][0m[91m 63%|██████▎   | 2450/3910 [00:44<00:12, 112.54it/s][0m[91m 63%|██████▎   | 2466/3910 [00:44<00:12, 116.60it/s][0m[91m 63%|██████▎   | 2482/3910 [00:44<00:11, 122.25it/s][0m[91m 64%|██████▍   | 2498/3910 [00:44<00:11, 126.67it/s][0m[91m 64%|██████▍   | 2514/3910 [00:45<00:10, 130.06it/s][0m[91m 65%|██████▍   | 2530/3910 [00:45<00:10, 132.45it/s][0m[91m 65%|██████▌   | 2546/3910 [00:45<00:10, 134.28it/s][0m[91m 66%|██████▌   | 2562/3910 [00:45<00:09, 135.57it/s][0m[91m 66%|██████▌   | 2578/3910 [00:45<00:10, 133.17it/s][0m[91m 66%|██████▋   | 2594/3910 [00:45<00:09, 134.76it/s][0m[91m 67%|██████▋   | 2610/3910 [00:45<00:09, 135.80it/s][0m[91m 67%|██████▋   | 2626/3910 [00:45<00:09, 136.73it/s][0m[91m 68%|██████▊   | 2642/3910 [00:45<00:09, 137.30it/s][0m[91m 68%|██████▊   | 2658/3910 [00:46<00:09, 137.54it/s][0m[91m 68%|██████▊   | 2674/3910 [00:46<00:08, 137.82it/s][0m[91m 69%|██████▉   | 2690/3910 [00:46<00:08, 138.08it/s][0m[91m 69%|██████▉   | 2706/3910 [00:46<00:08, 138.32it/s][0m[91m 70%|██████▉   | 2722/3910 [00:46<00:08, 138.28it/s][0m[91m 70%|███████   | 2738/3910 [00:46<00:08, 138.50it/s][0m[91m 70%|███████   | 2754/3910 [00:46<00:08, 138.49it/s][0m[91m 71%|███████   | 2770/3910 [00:46<00:08, 138.50it/s][0m[91m 71%|███████▏  | 2786/3910 [00:47<00:08, 138.39it/s][0m[91m 72%|███████▏  | 2802/3910 [00:47<00:07, 138.57it/s][0m[91m 72%|███████▏  | 2818/3910 [00:47<00:07, 138.54it/s][0m[91m 72%|███████▏  | 2834/3910 [00:47<00:07, 139.27it/s][0m[91m 73%|███████▎  | 2866/3910 [00:47<00:06, 155.59it/s][0m[91m 74%|███████▍  | 2898/3910 [00:47<00:07, 144.07it/s][0m[91m 75%|███████▍  | 2914/3910 [00:47<00:07, 135.28it/s][0m[91m 75%|███████▍  | 2930/3910 [00:48<00:06, 140.01it/s][0m[91m 76%|███████▌  | 2962/3910 [00:48<00:06, 149.22it/s][0m[91m 77%|███████▋  | 2994/3910 [00:48<00:05, 156.89it/s][0m[91m 77%|███████▋  | 3026/3910 [00:48<00:05, 159.61it/s][0m[91m 78%|███████▊  | 3042/3910 [00:48<00:05, 158.18it/s][0m[91m 79%|███████▊  | 3074/3910 [00:48<00:05, 160.52it/s][0m[91m 79%|███████▉  | 3106/3910 [00:49<00:05, 159.79it/s][0m[91m 80%|████████  | 3138/3910 [00:49<00:04, 161.99it/s][0m[91m 81%|████████  | 3170/3910 [00:49<00:04, 165.59it/s][0m[91m 82%|████████▏ | 3202/3910 [00:49<00:04, 165.91it/s][0m[91m 83%|████████▎ | 3234/3910 [00:49<00:04, 164.26it/s][0m[91m 84%|████████▎ | 3266/3910 [00:50<00:03, 165.29it/s][0m[91m 84%|████████▍ | 3298/3910 [00:50<00:03, 168.14it/s][0m[91m 85%|████████▌ | 3330/3910 [00:50<00:03, 174.29it/s][0m[91m 86%|████████▌ | 3362/3910 [00:50<00:03, 181.63it/s][0m[91m 87%|████████▋ | 3394/3910 [00:50<00:03, 170.60it/s][0m[91m 87%|████████▋ | 3412/3910 [00:50<00:03, 165.56it/s][0m[91m 88%|████████▊ | 3429/3910 [00:51<00:03, 124.38it/s][0m[91m 88%|████████▊ | 3443/3910 [00:51<00:03, 122.54it/s][0m[91m 88%|████████▊ | 3458/3910 [00:51<00:04, 104.22it/s][0m[91m 89%|████████▉ | 3490/3910 [00:51<00:03, 130.87it/s][0m[91m 90%|█████████ | 3522/3910 [00:51<00:02, 150.91it/s][0m[91m 91%|█████████ | 3554/3910 [00:52<00:02, 162.94it/s][0m[91m 92%|█████████▏| 3586/3910 [00:52<00:01, 173.75it/s][0m[91m 93%|█████████▎| 3618/3910 [00:52<00:01, 179.25it/s][0m[91m 93%|█████████▎| 3650/3910 [00:52<00:01, 185.11it/s][0m[91m 94%|█████████▍| 3682/3910 [00:52<00:01, 191.96it/s][0m[91m 95%|█████████▍| 3714/3910 [00:52<00:01, 194.42it/s][0m[91m 96%|█████████▌| 3746/3910 [00:52<00:00, 194.05it/s][0m[91m 97%|█████████▋| 3778/3910 [00:53<00:00, 196.05it/s][0m[91m 97%|█████████▋| 3810/3910 [00:53<00:00, 200.18it/s][0m[91m 98%|█████████▊| 3842/3910 [00:53<00:00, 200.44it/s][0m[91m 99%|█████████▉| 3874/3910 [00:53<00:00, 198.13it/s][0m[91m100%|█████████▉| 3906/3910 [00:53<00:00, 221.24it/s][0m[91m100%|██████████| 3910/3910 [00:53<00:00, 72.80it/s] 
+[0mdownload https://paddleocr.bj.bcebos.com/PP-OCRv4/english/en_PP-OCRv4_rec_infer.tar to /root/.paddleocr/whl/rec/en/en_PP-OCRv4_rec_infer/en_PP-OCRv4_rec_infer.tar
+[91m  0%|          | 0/10000 [00:00<?, ?it/s][0m[91m  0%|          | 3/10000 [00:00<12:59, 12.83it/s][0m[91m  0%|          | 19/10000 [00:00<03:39, 45.47it/s][0m[91m  0%|          | 35/10000 [00:00<04:20, 38.31it/s][0m[91m  1%|          | 51/10000 [00:01<03:29, 47.55it/s][0m[91m  1%|          | 67/10000 [00:01<03:04, 53.87it/s][0m[91m  1%|          | 83/10000 [00:01<02:50, 58.22it/s][0m[91m  1%|          | 99/10000 [00:01<02:41, 61.25it/s][0m[91m  1%|          | 115/10000 [00:02<02:35, 63.37it/s][0m[91m  1%|▏         | 131/10000 [00:02<02:32, 64.82it/s][0m[91m  1%|▏         | 147/10000 [00:02<02:29, 65.84it/s][0m[91m  2%|▏         | 163/10000 [00:02<02:27, 66.56it/s][0m[91m  2%|▏         | 179/10000 [00:03<02:26, 67.09it/s][0m[91m  2%|▏         | 195/10000 [00:03<02:25, 67.40it/s][0m[91m  2%|▏         | 211/10000 [00:03<02:24, 67.63it/s][0m[91m  2%|▏         | 227/10000 [00:03<02:24, 67.80it/s][0m[91m  2%|▏         | 243/10000 [00:03<02:23, 67.97it/s][0m[91m  3%|▎         | 259/10000 [00:04<02:23, 68.11it/s][0m[91m  3%|▎         | 291/10000 [00:04<01:49, 88.52it/s][0m[91m  3%|▎         | 307/10000 [00:04<01:57, 82.39it/s][0m[91m  3%|▎         | 339/10000 [00:04<01:38, 98.58it/s][0m[91m  4%|▎         | 371/10000 [00:05<01:27, 109.94it/s][0m[91m  4%|▍         | 403/10000 [00:05<01:21, 117.87it/s][0m[91m  4%|▍         | 435/10000 [00:05<01:17, 123.45it/s][0m[91m  5%|▍         | 467/10000 [00:05<01:14, 127.52it/s][0m[91m  5%|▌         | 515/10000 [00:06<01:02, 150.63it/s][0m[91m  6%|▌         | 579/10000 [00:06<00:50, 187.21it/s][0m[91m  6%|▋         | 643/10000 [00:06<00:43, 213.10it/s][0m[91m  7%|▋         | 707/10000 [00:06<00:40, 231.07it/s][0m[91m  8%|▊         | 787/10000 [00:07<00:34, 263.91it/s][0m[91m  9%|▊         | 867/10000 [00:07<00:31, 287.32it/s][0m[91m 10%|▉         | 979/10000 [00:07<00:26, 344.31it/s][0m[91m 11%|█         | 1075/10000 [00:07<00:24, 363.86it/s][0m[91m 12%|█▏        | 1203/10000 [00:07<00:21, 418.44it/s][0m[91m 13%|█▎        | 1331/10000 [00:08<00:18, 456.61it/s][0m[91m 15%|█▍        | 1491/10000 [00:08<00:16, 523.66it/s][0m[91m 17%|█▋        | 1651/10000 [00:08<00:14, 571.81it/s][0m[91m 18%|█▊        | 1843/10000 [00:08<00:12, 645.11it/s][0m[91m 20%|██        | 2035/10000 [00:09<00:11, 697.81it/s][0m[91m 23%|██▎       | 2259/10000 [00:09<00:10, 773.94it/s][0m[91m 25%|██▍       | 2499/10000 [00:09<00:08, 850.08it/s][0m[91m 28%|██▊       | 2755/10000 [00:09<00:07, 921.56it/s][0m[91m 30%|███       | 3011/10000 [00:10<00:07, 972.98it/s][0m[91m 33%|███▎      | 3267/10000 [00:10<00:06, 1007.98it/s][0m[91m 35%|███▌      | 3507/10000 [00:10<00:06, 1011.05it/s][0m[91m 38%|███▊      | 3763/10000 [00:10<00:06, 1035.95it/s][0m[91m 40%|████      | 4019/10000 [00:11<00:05, 1052.75it/s][0m[91m 43%|████▎     | 4275/10000 [00:11<00:05, 1064.20it/s][0m[91m 45%|████▌     | 4531/10000 [00:11<00:05, 1072.37it/s][0m[91m 48%|████▊     | 4787/10000 [00:11<00:04, 1077.15it/s][0m[91m 50%|█████     | 5043/10000 [00:11<00:04, 1081.73it/s][0m[91m 53%|█████▎    | 5299/10000 [00:12<00:04, 1084.05it/s][0m[91m 55%|█████▌    | 5539/10000 [00:12<00:04, 1066.59it/s][0m[91m 58%|█████▊    | 5795/10000 [00:12<00:03, 1073.97it/s][0m[91m 61%|██████    | 6051/10000 [00:12<00:03, 1079.22it/s][0m[91m 63%|██████▎   | 6307/10000 [00:13<00:03, 1081.98it/s][0m[91m 66%|██████▌   | 6563/10000 [00:13<00:03, 1084.83it/s][0m[91m 68%|██████▊   | 6819/10000 [00:13<00:02, 1086.87it/s][0m[91m 71%|███████   | 7075/10000 [00:13<00:02, 1087.96it/s][0m[91m 73%|███████▎  | 7331/10000 [00:14<00:02, 1088.16it/s][0m[91m 76%|███████▌  | 7587/10000 [00:14<00:02, 1090.41it/s][0m[91m 78%|███████▊  | 7843/10000 [00:14<00:01, 1090.26it/s][0m[91m 81%|████████  | 8099/10000 [00:14<00:01, 1090.54it/s][0m[91m 84%|████████▎ | 8355/10000 [00:15<00:01, 1090.83it/s][0m[91m 86%|████████▌ | 8595/10000 [00:15<00:01, 1070.56it/s][0m[91m 89%|████████▊ | 8851/10000 [00:15<00:01, 1076.13it/s][0m[91m 91%|█████████ | 9107/10000 [00:15<00:00, 1079.27it/s][0m[91m 94%|█████████▎| 9363/10000 [00:15<00:00, 1084.56it/s][0m[91m 96%|█████████▌| 9619/10000 [00:16<00:00, 1085.89it/s][0m[91m 99%|█████████▉| 9875/10000 [00:16<00:00, 1087.73it/s][0m[91m100%|██████████| 10000/10000 [00:16<00:00, 608.76it/s]
+[0mdownload https://paddleocr.bj.bcebos.com/dygraph_v2.0/ch/ch_ppocr_mobile_v2.0_cls_infer.tar to /root/.paddleocr/whl/cls/ch_ppocr_mobile_v2.0_cls_infer/ch_ppocr_mobile_v2.0_cls_infer.tar
+[91m  0%|          | 0/2138 [00:00<?, ?it/s][0m[91m  0%|          | 3/2138 [00:00<02:07, 16.80it/s][0m[91m  1%|          | 19/2138 [00:00<00:41, 50.72it/s][0m[91m  2%|▏         | 35/2138 [00:00<00:31, 67.17it/s][0m[91m  2%|▏         | 51/2138 [00:00<00:24, 85.55it/s][0m[91m  3%|▎         | 67/2138 [00:00<00:23, 87.40it/s][0m[91m  4%|▍         | 83/2138 [00:01<00:23, 88.48it/s][0m[91m  5%|▍         | 99/2138 [00:01<00:22, 89.65it/s][0m[91m  6%|▌         | 131/2138 [00:01<00:20, 98.00it/s][0m[91m  7%|▋         | 147/2138 [00:01<00:23, 83.94it/s][0m[91m  8%|▊         | 163/2138 [00:02<00:25, 78.85it/s][0m[91m  8%|▊         | 179/2138 [00:02<00:26, 75.28it/s][0m[91m  9%|▉         | 195/2138 [00:02<00:27, 71.75it/s][0m[91m 10%|▉         | 211/2138 [00:02<00:27, 70.50it/s][0m[91m 11%|█         | 227/2138 [00:02<00:27, 69.62it/s][0m[91m 11%|█▏        | 243/2138 [00:03<00:27, 68.33it/s][0m[91m 12%|█▏        | 259/2138 [00:03<00:27, 68.15it/s][0m[91m 13%|█▎        | 275/2138 [00:03<00:27, 68.00it/s][0m[91m 14%|█▎        | 291/2138 [00:03<00:27, 67.93it/s][0m[91m 14%|█▍        | 307/2138 [00:04<00:29, 62.23it/s][0m[91m 15%|█▌        | 323/2138 [00:04<00:31, 58.47it/s][0m[91m 16%|█▌        | 339/2138 [00:04<00:31, 57.73it/s][0m[91m 17%|█▋        | 355/2138 [00:05<00:31, 57.08it/s][0m[91m 17%|█▋        | 371/2138 [00:05<00:31, 56.86it/s][0m[91m 18%|█▊        | 387/2138 [00:05<00:30, 57.16it/s][0m[91m 19%|█▉        | 403/2138 [00:05<00:30, 56.43it/s][0m[91m 20%|█▉        | 419/2138 [00:06<00:30, 56.07it/s][0m[91m 20%|██        | 435/2138 [00:06<00:30, 55.01it/s][0m[91m 21%|██        | 451/2138 [00:06<00:33, 50.41it/s][0m[91m 22%|██▏       | 467/2138 [00:07<00:33, 49.43it/s][0m[91m 23%|██▎       | 483/2138 [00:07<00:34, 47.32it/s][0m[91m 23%|██▎       | 499/2138 [00:08<00:34, 47.35it/s][0m[91m 24%|██▍       | 515/2138 [00:08<00:35, 45.93it/s][0m[91m 25%|██▍       | 531/2138 [00:08<00:34, 46.40it/s][0m[91m 26%|██▌       | 547/2138 [00:09<00:35, 45.31it/s][0m[91m 26%|██▋       | 563/2138 [00:09<00:41, 37.73it/s][0m[91m 27%|██▋       | 579/2138 [00:10<00:39, 39.53it/s][0m[91m 28%|██▊       | 595/2138 [00:10<00:35, 43.09it/s][0m[91m 29%|██▊       | 611/2138 [00:10<00:32, 47.44it/s][0m[91m 29%|██▉       | 627/2138 [00:10<00:28, 52.58it/s][0m[91m 30%|███       | 643/2138 [00:11<00:25, 58.69it/s][0m[91m 31%|███       | 659/2138 [00:11<00:22, 65.23it/s][0m[91m 32%|███▏      | 675/2138 [00:11<00:20, 72.46it/s][0m[91m 32%|███▏      | 691/2138 [00:11<00:18, 80.16it/s][0m[91m 33%|███▎      | 707/2138 [00:11<00:16, 88.19it/s][0m[91m 34%|███▍      | 723/2138 [00:11<00:14, 96.73it/s][0m[91m 35%|███▍      | 739/2138 [00:11<00:13, 103.44it/s][0m[91m 35%|███▌      | 755/2138 [00:12<00:12, 115.17it/s][0m[91m 36%|███▌      | 771/2138 [00:12<00:10, 124.38it/s][0m[91m 38%|███▊      | 803/2138 [00:12<00:09, 141.49it/s][0m[91m 39%|███▉      | 835/2138 [00:12<00:08, 157.73it/s][0m[91m 41%|████      | 867/2138 [00:12<00:07, 172.17it/s][0m[91m 42%|████▏     | 899/2138 [00:12<00:06, 187.62it/s][0m[91m 44%|████▎     | 931/2138 [00:12<00:05, 203.15it/s][0m[91m 45%|████▌     | 963/2138 [00:13<00:05, 218.76it/s][0m[91m 47%|████▋     | 995/2138 [00:13<00:05, 223.34it/s][0m[91m 49%|████▉     | 1043/2138 [00:13<00:04, 240.12it/s][0m[91m 51%|█████     | 1091/2138 [00:13<00:03, 278.26it/s][0m[91m 53%|█████▎    | 1123/2138 [00:13<00:03, 280.47it/s][0m[91m 54%|█████▍    | 1154/2138 [00:13<00:03, 275.50it/s][0m[91m 56%|█████▌    | 1202/2138 [00:13<00:03, 273.81it/s][0m[91m 58%|█████▊    | 1250/2138 [00:13<00:02, 309.56it/s][0m[91m 61%|██████    | 1298/2138 [00:14<00:02, 314.19it/s][0m[91m 62%|██████▏   | 1330/2138 [00:14<00:02, 314.19it/s][0m[91m 64%|██████▍   | 1378/2138 [00:14<00:02, 305.67it/s][0m[91m 67%|██████▋   | 1426/2138 [00:14<00:02, 325.99it/s][0m[91m 69%|██████▉   | 1474/2138 [00:14<00:01, 332.53it/s][0m[91m 71%|███████   | 1522/2138 [00:14<00:01, 335.96it/s][0m[91m 73%|███████▎  | 1556/2138 [00:14<00:01, 316.43it/s][0m[91m 76%|███████▌  | 1618/2138 [00:15<00:01, 328.36it/s][0m[91m 78%|███████▊  | 1666/2138 [00:15<00:01, 357.82it/s][0m[91m 80%|████████  | 1714/2138 [00:15<00:01, 362.00it/s][0m[91m 82%|████████▏ | 1751/2138 [00:15<00:01, 347.16it/s][0m[91m 84%|████████▍ | 1794/2138 [00:15<00:00, 363.01it/s][0m[91m 86%|████████▌ | 1842/2138 [00:15<00:00, 365.76it/s][0m[91m 88%|████████▊ | 1879/2138 [00:15<00:00, 349.36it/s][0m[91m 90%|████████▉ | 1922/2138 [00:15<00:00, 365.33it/s][0m[91m 92%|█████████▏| 1970/2138 [00:16<00:00, 374.28it/s][0m[91m 94%|█████████▍| 2008/2138 [00:16<00:00, 349.89it/s][0m[91m 97%|█████████▋| 2065/2138 [00:16<00:00, 346.38it/s][0m[91m100%|█████████▉| 2129/2138 [00:16<00:00, 410.54it/s][0m[91m100%|██████████| 2138/2138 [00:16<00:00, 129.92it/s]
+[0mPaddleOCR models downloaded successfully
+Removing intermediate container eb35dd235f2a
+ ---> f7b4d6cd504e
+Step 7/10 : RUN mkdir -p /app/uploads
+ ---> Running in cafede728f9c
+Removing intermediate container cafede728f9c
+ ---> a274fbcd3627
+Step 8/10 : COPY . .
+ ---> d1f487f7a933
+Step 9/10 : EXPOSE 5000
+ ---> Running in 73f44857057d
+Removing intermediate container 73f44857057d
+ ---> 3a7deb6fa18c
+Step 10/10 : CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "2", "--timeout", "120", "app:app"]
+ ---> Running in c3f84d84c393
+Removing intermediate container c3f84d84c393
+ ---> 10f64d74d72b
+Successfully built 10f64d74d72b
+Successfully tagged soet-backend:latest
+[0;32m  -> Backend image built[0m
+[1;33m  -> Starting backend...[0m
+3e6d71c49f1c7ad674f1b9b2723aaa8aac25ebae0ba446a39a9896ccc8ec64d8
+[0;32m  -> Backend container started[0m
+[1;33m  -> Building frontend image...[0m
+Sending build context to Docker daemon  365.1kB
+Step 1/11 : FROM node:18-alpine AS build
+ ---> ee77c6cd7c18
+Step 2/11 : WORKDIR /app
+ ---> Using cache
+ ---> 28292c7bcb25
+Step 3/11 : COPY package.json ./
+ ---> Using cache
+ ---> e84778009efe
+Step 4/11 : RUN npm install --legacy-peer-deps
+ ---> Using cache
+ ---> e1ad4da163d2
+Step 5/11 : COPY . .
+ ---> 52ed481e51bc
+Step 6/11 : RUN npm run build
+ ---> Running in 09aad99deaf9
+
+> spmvv-result-analysis@1.0.0 build
+> react-scripts build
+
+Creating an optimized production build...
+Compiled with warnings.
+
+[eslint] 
+src/components/Navbar.js
+  Line 9:9:  'user' is assigned a value but never used  no-unused-vars
+
+src/pages/AdminDashboard.js
+  Line 775:37:  'batchPrefix' is assigned a value but never used  no-unused-vars
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+File sizes after gzip:
+
+  197.25 kB  build/static/js/main.49061aba.js
+  7.34 kB    build/static/css/main.3e4b0466.css
+
+The project was built assuming it is hosted at /.
+You can control this with the homepage field in your package.json.
+
+The build folder is ready to be deployed.
+You may serve it with a static server:
+
+  npm install -g serve
+  serve -s build
+
+Find out more about deployment here:
+
+  https://cra.link/deployment
+
+[91mnpm notice
+npm notice New major version of npm available! 10.8.2 -> 11.12.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.12.1
+npm notice To update run: npm install -g npm@11.12.1
+npm notice
+[0mRemoving intermediate container 09aad99deaf9
+ ---> fa7a184c7104
+Step 7/11 : FROM nginx:alpine
+ ---> d5030d429039
+Step 8/11 : COPY nginx.conf /etc/nginx/conf.d/default.conf
+ ---> 8993476baff5
+Step 9/11 : COPY --from=build /app/build /usr/share/nginx/html
+ ---> d1701ed0fbb1
+Step 10/11 : EXPOSE 80
+ ---> Running in e2d08c470f79
+Removing intermediate container e2d08c470f79
+ ---> 6dfa6beecf6e
+Step 11/11 : CMD ["nginx", "-g", "daemon off;"]
+ ---> Running in 8b6cc49442ff
+Removing intermediate container 8b6cc49442ff
+ ---> b8ba0f116d67
+Successfully built b8ba0f116d67
+Successfully tagged soet-frontend:latest
+[0;32m  -> Frontend image built[0m
+[1;33m  -> Starting frontend...[0m
+4aea11fdbaaa75d25c6a1f8dca76cc3f42b4b00342fc5c8fde2412f91c51659c
+[0;32m  -> Frontend container started[0m
+[1;33m  -> Waiting for backend initialization...[0m
+
+[1;33m[Step 5/5] Restoring database backup...[0m
+[0;32m  -> Restoring from: /opt/result-analysis/backups/db_backup_20260421_210740.sql[0m
+[0;32m  -> Database restored successfully![0m
+
+[0;34m================================================================[0m
+[0;32m  Deployment Complete![0m
+[0;34m================================================================[0m
+
+[0;32m  Application URL: http://10.127.248.85:2271[0m
+[0;32m  Admin Login:     username: admin | password: admin123[0m
+
+[0;34m  Container Status:[0m
+soet-frontend	Up 13 seconds	0.0.0.0:2271->80/tcp, :::2271->80/tcp
+soet-backend	Up 35 seconds	5000/tcp
+soet-db	Up 16 minutes	3306/tcp
+
+[0;34m================================================================[0m
